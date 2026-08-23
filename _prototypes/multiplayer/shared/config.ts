@@ -1,7 +1,7 @@
 /**
  * Physics config, shared verbatim between server and client.
  *
- * Trimmed down from _prototypes/heliotyper-game-prototype/src/config.ts to just
+ * Trimmed down from _prototypes/game/src/config.ts to just
  * the dev-tunable physics block: this playground is about netcode, not staging,
  * so none of the sky/cloud/planet layout constants come along.
  */

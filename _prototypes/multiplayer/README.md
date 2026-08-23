@@ -3,9 +3,9 @@
 A dockerized spike to answer two questions before committing to the real multiplayer build:
 
 1. What does a six-pilot HelioTyper race actually look like?
-2. Does the netcode described in section 4.9 of [rating-mechanics-and-matchmaking.md](../_claude-discussions/rating-mechanics-and-matchmaking.md) hold up, or does it only sound right on paper?
+2. Does the three-flow netcode described in [.claude/notes/experiments.md](../../.claude/notes/experiments.md) hold up, or does it only sound right on paper?
 
-Nothing here is production code and nothing persists. NestJS + socket.io on the server, ExcaliburJS + Vite on the client, matching the stack in [api/](../api/).
+Nothing here is production code and nothing persists. NestJS + socket.io on the server, ExcaliburJS + Vite on the client, matching the stack in [api/](../../api/).
 
 ```
 docker compose up -d
@@ -42,7 +42,7 @@ Other things the panel makes visible:
 
 ### One simulation, not two
 
-[`shared/race.ts`](shared/race.ts) is lifted almost unchanged from [the single player prototype](../_prototypes/heliotyper-game-prototype/src/race.ts), which already kept it free of rendering and DOM specifically so it could run on a server. This playground cashes that in: the same class drives your browser's local pilot and the server's bot pilots.
+[`shared/race.ts`](shared/race.ts) is lifted almost unchanged from [the single player prototype](../game/src/race.ts), which already kept it free of rendering and DOM specifically so it could run on a server. This playground cashes that in: the same class drives your browser's local pilot and the server's bot pilots.
 
 That matters more than it sounds. Divergence between a client physics implementation and a server one is the entire bug class this design is exposed to, and the cheapest defence is not having two implementations.
 
@@ -72,7 +72,7 @@ This closes the naive "report a big number" cheat. It does not close a client th
 
 ## What this prototype deliberately does not do
 
-- **No art.** Rockets are drawn with canvas primitives. The generated art in [assets/](../assets/) is what makes the single player port look the way it does, but the question here is whether six pilots' relative position and state are readable at a glance, and shapes answer that without a 1.5MB heliopause sprite or an asset pipeline inside a container.
+- **No art.** Rockets are drawn with canvas primitives. The generated art in [assets/](../../assets/) is what makes the single player port look the way it does, but the question here is whether six pilots' relative position and state are readable at a glance, and shapes answer that without a 1.5MB heliopause sprite or an asset pipeline inside a container.
 - **No camera work.** The real game locks the camera and interpolates the ship toward landmarks. Here progress maps straight to lane position, because relative standing is the thing being evaluated.
 - **No matchmaking, no ready check, no persistence.** All parked in the rating doc.
 - **No anti-cheat.** See above.

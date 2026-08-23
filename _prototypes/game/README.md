@@ -1,7 +1,7 @@
 # HelioTyper on ExcaliburJS
 
-The canvas prototype ([../../prototype.html](../../prototype.html)), ported to
-ExcaliburJS and running on the generated art in [`assets/`](../../assets).
+The original single-file canvas prototype (since deleted), ported to ExcaliburJS
+and running on the generated art in [`assets/`](../../assets).
 
 ```
 npm install
@@ -10,9 +10,8 @@ npm run dev      # http://localhost:5173
 
 `npm run build` typechecks and bundles to `dist/`. `npm run typecheck` on its own.
 
-This is step 2 of the list at the bottom of
-[`protoype.md`](../../protoype.md): real sprite art, and the port onto a real
-engine. What changed is the art, the stack, the length of the race, and one
+This is step 2 of the roadmap in [`CLAUDE.md`](../../CLAUDE.md): real sprite art,
+and the port onto a real engine. What changed is the art, the stack, the length of the race, and one
 deliberate physics change: speed now decays to a **cruise floor** rather than to
 zero (see below).
 
@@ -127,7 +126,7 @@ The rocket needs two anchors rather than one, since `blastoff` uses a wider cell
 **The camera never moves.** It is pinned to the centre of the drawable area, so
 world space is screen space. The ship is the only thing that travels, climbing
 from `ROCKET_START_FRAC` to `FINISH_LINE_Y` as progress goes 0..1. Planets stream
-past it; the heliopause is pinned and only fades in. protoype.md records that
+past it; the heliopause is pinned and only fades in. The prototype log recorded that
 every version where the finish line moved toward the ship read wrong.
 
 **The sky stays as code.** One gradient, two stop colours lerped through five
@@ -220,7 +219,7 @@ on and what is next.
 
 ## Still open
 
-Unchanged from protoype.md, none of these are decided here:
+Tracked in .claude/notes/ideas.md, none of these are decided here:
 
 - Backspace behaviour
 - Whether difficulty tiers change decay rate, hull, or race distance

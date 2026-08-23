@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite';
 
-// The prototype lives in _prototypes/typosphere but reads its art straight out of
+// The prototype lives in _prototypes/game but reads its art straight out of
 // the repo's assets/ folder. Nothing is copied: assets/ stays the single source of
 // truth, and the generators there stay the source of truth for the art itself.
 //

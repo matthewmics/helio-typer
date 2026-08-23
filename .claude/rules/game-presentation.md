@@ -1,0 +1,66 @@
+# Game presentation
+
+How the run is staged and drawn. Art lives in [assets/](../../assets), generated
+rather than hand-drawn, one folder per subject with its own README.
+
+## The outbound run
+
+```
+launch pad -> clouds -> moon -> mars -> jupiter -> saturn
+           -> uranus -> neptune -> pluto -> THE HELIOPAUSE
+```
+
+- Every intermediate body (moon, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto)
+  is a disc landmark the ship passes, sized for readability rather than
+  real-world scale. See [assets/planets/README.md](../../assets/planets/README.md).
+- The moon is the first thing you pass, not the finish.
+- The finish is deliberately not a disc. The heliopause is a full-width
+  shimmering aurora curtain spanning the screen, so reaching it reads as
+  crossing an edge rather than passing one more planet. See
+  [assets/finish/README.md](../../assets/finish/README.md).
+
+## Camera and framing
+
+- The camera is locked for the entire race, so world space is screen space. It
+  never pans, never zooms. `camera.shake` is the only thing that touches it.
+- The ship's screen position rises with `progress`, from `ROCKET_START_FRAC` of
+  the viewport up to `FINISH_LINE_Y`.
+- The heliopause does not move. It is the edge you arrive at, so it holds
+  position while everything else streams by.
+- Intermediate bodies each sit at a fixed point along the run and stream past
+  with their own parallax factor, so they read as bodies at different distances
+  rather than a row of stickers at the same depth. Each body also has its own
+  breathe and sway phase so no two move in step.
+- Starfield drift is cosmetic only, decoupled from actual position.
+
+> **Unresolved.** The original locked lesson was "a fixed landmark must never
+> move toward the ship; only the ship moves." The current port satisfies that for
+> the finish but not for the intermediate bodies, which stream past with
+> parallax. Both readings are defensible and the code currently does the second.
+> Flagged rather than silently resolved.
+
+## Two clocks, not one
+
+- Sky, ground, clouds and stars run on `atmo`, which is `progress / ATMO_END`
+  clamped to 1, with `ATMO_END = 0.10`.
+- So the entire dusk-to-space climb happens in the first 10% of the run and the
+  remaining 90% is space. This preserves the carefully tuned atmosphere sequence
+  without re-tuning it against the much longer race, and it puts Earth behind you
+  before the moon shows up.
+
+## Atmosphere
+
+- **Ground**: dusk scene with hill silhouette, backlit skyline, launch pad and
+  gantry, falling away in the first few percent of the climb.
+- **Clouds**: real cloud objects at fixed altitudes with parallax depth stream
+  past the ship. A portion draw in front of the rocket for depth.
+- **Sky**: one gradient whose stop colors lerp through keyframes from dusk to
+  black space. Two cross-fading gradients were tried and rejected, they read as a
+  muddy smear. Do not reintroduce that approach.
+- **Stars**: invisible at ground level, fade in as altitude increases.
+
+## HUD
+
+- Player name pill above the ship's nose.
+- Hull segments and a speed bar below the fins, both easing downward to stay
+  clear of the growing exhaust plume.

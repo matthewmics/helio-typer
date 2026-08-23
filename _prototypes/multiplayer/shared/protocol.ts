@@ -2,8 +2,8 @@ import type { BotConfig, NetConfig, RaceConfig } from './config';
 import type { Phase } from './race';
 
 /**
- * The wire protocol, and with it the trust boundary from section 4.9 of
- * _claude-discussions/rating-mechanics-and-matchmaking.md.
+ * The wire protocol, and with it the trust boundary from the three-flow netcode
+ * design in .claude/notes/experiments.md.
  *
  * Three flows out of the client, deliberately kept as three separate message
  * types rather than one combined update, because they have genuinely different
