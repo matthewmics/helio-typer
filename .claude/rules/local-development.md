@@ -33,13 +33,14 @@ knowing that are not obvious from reading it:
   Traefik before suspecting the service.
 - `api` and `web` bind-mount source for hot reload, which has real caveats. See
   [hot-reload.md](hot-reload.md).
+- `api` and `web` also mask their `node_modules` with anonymous volumes, so the
+  container keeps the ones baked into its image rather than the host copy. Those
+  volumes are reused across `up` and `--build`, so **adding a dependency needs
+  `docker compose up -d --build --renew-anon-volumes api`**. A plain rebuild
+  leaves the stale volume in place and the container dies on `Cannot find module`
+  for a package that is plainly installed on the host.
 - `postgres` and `redis` are internal only but also published on host ports 5432
   and 6379, which is what lets host-side CLI tooling (notably Prisma) reach them.
 - `mailpit` catches SMTP locally at `mail.heliotyper.local`, SMTP on host port
   1025. Nothing sends real mail in dev.
 
-## Multiplayer playground
-
-[_prototypes/multiplayer/](../../_prototypes/multiplayer/) has its own
-`docker-compose.yml` on shifted ports (client 3100, server 3101) specifically so
-it can run at the same time as the root stack. Bring it up separately.

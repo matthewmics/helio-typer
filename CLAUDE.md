@@ -5,8 +5,15 @@ out of the solar system, all the way to the heliopause, the boundary where the
 solar wind stalls against interstellar space. Core mechanics are locked.
 
 A pnpm workspace: [api/](api/) (NestJS) and [web/](web/) (Next.js), with
-generated sprite art in [assets/](assets/) and three non-production spikes in
-[_prototypes/](_prototypes/). Nothing under `_prototypes/` is production code.
+generated sprite art in [assets/](assets/).
+
+The three spikes that used to live in `_prototypes/` were removed on 2026-08-31
+once the game landed in `web/`. They are still in git history at commit
+`c4db0f8` if a design decision ever needs re-reading. Two of them had already
+been superseded, by [web/game/](web/game/) and by the real app shell; the third,
+the multiplayer netcode spike, was removed before its ideas reached `api/`, so
+[notes/experiments.md](.claude/notes/experiments.md) is now the only description
+of that design.
 
 ## Core rules, always in force
 
@@ -36,6 +43,7 @@ covers what you are working on.
 |---|---|
 | [game-mechanics.md](.claude/rules/game-mechanics.md) | The simulation: typing, speed and progress, mistakes, hull and stall, WPM, blastoff |
 | [game-presentation.md](.claude/rules/game-presentation.md) | The outbound run and its landmarks, camera and framing, atmosphere, sky, HUD |
+| [matchmaking.md](.claude/rules/matchmaking.md) | Guest identity, the queue and ready check, bot fill, and the rules for running clustered |
 | [local-development.md](.claude/rules/local-development.md) | Workspace conventions, hosts file entries, Docker and Traefik routing |
 | [prisma.md](.claude/rules/prisma.md) | Prisma v7 gotchas: driver adapter, generate-before-compile, the cjs pin, the rootDir trap |
 | [hot-reload.md](.claude/rules/hot-reload.md) | Webpack HMR and polling across the bind mount, and the `allowedDevOrigins` trap |
@@ -54,11 +62,15 @@ note as precedent.
 ## Roadmap
 
 1. ~~Real sprite art now that mechanics are locked.~~ Done, see [assets/](assets/).
-2. Port to ExcaliburJS: camera lock, particle system, the full outbound run to the
-   heliopause. In progress, see
-   [_prototypes/game/](_prototypes/game/).
+2. ~~Port to ExcaliburJS: camera lock, particle system, the full outbound run to
+   the heliopause.~~ Done, and playable at `/play`, see [web/game/](web/game/).
 3. NestJS gateway with a server-authoritative loop, starting single-player against
-   the server. Netcode design is being spiked in
-   [_prototypes/multiplayer/](_prototypes/multiplayer/).
-4. Multiplayer: lobby, room codes, countdown, minimap, multiple rockets.
+   the server. The design is written up in
+   [notes/experiments.md](.claude/notes/experiments.md); the spike that proved it
+   is gone, so this is a rebuild from the notes rather than a port.
+4. Multiplayer. Guest matchmaking is built and running in
+   [api/src/matchmaking/](api/src/matchmaking/): queue, Dota-style ready check,
+   bot fill, clustered over Redis. See
+   [matchmaking.md](.claude/rules/matchmaking.md). Still to come: the race itself,
+   room codes, countdown, minimap, multiple rockets.
 5. Persistence (Postgres/Prisma) for race history and leaderboards.

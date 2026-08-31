@@ -1,0 +1,16 @@
+{
+  "name": "@heliotyper/engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The race simulation, shared verbatim by the browser and the server.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

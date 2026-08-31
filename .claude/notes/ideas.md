@@ -12,6 +12,34 @@ inline where they carry information.
 
 ---
 
+## [DECIDED] Ships are cosmetic only
+
+*2026-08-31. Closes the open question carried in
+[experiments.md](experiments.md) about the Hangar's stat-affecting perks.*
+
+Ships change how the rocket looks and nothing else. No extra hull segment, no
+softened mistake penalty, no decay pause on combo, no thrust or decay-resist
+differences. Every pilot in every race flies identical physics, whatever is in
+their hangar.
+
+- **Why**: a purchasable or unlockable stat is a second variable in a number the
+  whole game is built to measure. Completion time and WPM only mean something if
+  the only thing that differs between two runs is the typing, and the leaderboard
+  fairness problem this creates has no clean fix, only mitigations (flagging
+  perk-assisted races, separate boards, balance passes) that all cost more than
+  the perks were ever worth.
+- **What it buys**: ships stay a pure reward track. They can be handed out for
+  credits, quests, or milestones as freely as the design wants, with no balance
+  review and no leaderboard consequence, because nothing they do can affect a
+  result.
+- **What still needs designing**: what makes one ship desirable over another with
+  stats off the table. Silhouette, trim and palette, plume and exhaust treatment,
+  rarity as a flex rather than as power.
+- **Not decided here**: whether ships cost credits, how they are unlocked, or
+  whether the rarity tiers in the mockup survive.
+
+---
+
 ## [PROPOSED] Fastest Completion leaderboard, v1
 
 *2026-08-19. Tagged `[settled]` in the source doc, but nothing is implemented:
@@ -40,15 +68,19 @@ most recent 10 qualifying races**, ascending.
   not a custom private-room config. A DNF or non-standard race has no comparable
   completion time, so it neither consumes a "last 10" slot nor counts toward the
   10-race threshold.
+- **Guests never qualify.** Decided 2026-08-31 and now enforced by the fact that
+  guests have no account to hang a history on. See
+  [rules/matchmaking.md](../rules/matchmaking.md).
 - **Table columns**: Rank, Pilot, Avg completion time, Avg WPM, Most-used ship,
   Avg accuracy, all computed over the same last-10 window, so every column in a
   row describes the same set of races. Ship cannot be literally averaged;
   "most-used in the window" is the stand-in.
-- **Showing the ship is transparency, not endorsement.** If a ship ever has
-  stat-affecting perks (extra hull segment, softened mistake penalty, decay pause
-  on combo, per the Hangar design in the web prototype), which ship a top racer
-  favors is visible in the row rather than hidden. Does not resolve the fairness
-  question, but makes it legible.
+- **Showing the ship is flavor, not a performance signal.** Ships are cosmetic
+  only, so the column says something about a pilot's taste and nothing about an
+  advantage. This bullet previously argued the column for transparency, on the
+  grounds that a stat-affecting perk should at least be visible in the row. That
+  reason is gone; whether the column still earns its width is now an open
+  question below.
 
 ## [PROPOSED] Race persistence schema sketch
 
@@ -100,7 +132,8 @@ its own leaderboard.
 
 ## [PROPOSED] UI implications for the web prototype
 
-*2026-08-19. Against `_prototypes/ui/ui-mockup.html`.*
+*2026-08-19. Written against `_prototypes/ui/ui-mockup.html`, since deleted; the
+same pages now exist for real under [web/app/](../../web/app/).*
 
 - **Rankings page is a single table**, not tabs. Columns:
   `# / Pilot / Avg completion time / Avg WPM / Most-used ship / Avg accuracy`.
@@ -148,7 +181,9 @@ its own leaderboard.
 - Does the 10-race eligibility floor get raised or lowered once there is real
   data on how long 10 races takes an average player?
 - Is "most-used ship in the window" the right stand-in, or should it show the
-  currently-equipped ship, or drop the column?
+  currently-equipped ship, or drop the column? Sharper now that ships are
+  cosmetic only: the column is decoration on a table of measurements, so it
+  either earns its place as flavor or it goes.
 
 ---
 
@@ -211,10 +246,11 @@ Parked along with the Elo and credits ideas above.
 
 ### [UNDER DISCUSSION] Integrity gating for the leaderboard
 
-Beyond "finished on standard settings": a minimum accuracy floor, server-verified
-keystroke timing rather than trusting client-reported WPM, and disqualifying or
-clearly flagging any race where a stat-affecting ship perk was active, so
-purchased power does not silently inflate a leaderboard time.
+Beyond "finished on standard settings": a minimum accuracy floor, and
+server-verified keystroke timing rather than trusting client-reported WPM. This
+previously also had to cover disqualifying or flagging races flown with a
+stat-affecting ship perk; that requirement is gone now that ships are cosmetic
+only, so purchased power cannot inflate a leaderboard time in the first place.
 
 **Real anti-cheat is explicitly out of scope for v1.** Keystrokes are validated
 client-side for feel, because input has to be local-authoritative or fast typists

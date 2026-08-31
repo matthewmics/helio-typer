@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated: synced from assets/ by scripts/sync-game-assets.mjs
+/public/game/

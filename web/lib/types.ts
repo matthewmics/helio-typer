@@ -1,7 +1,14 @@
 export type Rarity = "common" | "rare" | "epic" | "legend";
 
-export type ShipStat = "Thrust" | "Decay resist" | "Hull";
-
+/**
+ * A ship is pure cosmetics.
+ *
+ * No stats, no perks, nothing that can touch a race outcome. Every pilot flies
+ * identical physics whatever is in their hangar, which is what keeps completion
+ * time and WPM comparable between two runs. See the decision in
+ * .claude/notes/ideas.md; this type is deliberately shaped so a stat cannot be
+ * added back without the change being obvious in review.
+ */
 export type Ship = {
   id: string;
   name: string;
@@ -10,12 +17,11 @@ export type Ship = {
   hull: string;
   fin: string;
   finShadow: string;
-  stats: Record<ShipStat, number>;
   owned: boolean;
   /** Unlock price, only meaningful while `owned` is false. */
   cost?: number;
-  perk: string;
-  perkText: string;
+  /** One line on how it looks. Never on how it flies. */
+  flavor: string;
 };
 
 export type GameMode = {

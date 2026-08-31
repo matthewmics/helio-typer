@@ -1,13 +1,14 @@
 # Game mechanics
 
 The simulation: what typing does to the ship. These rules are locked. The
-reference implementation is `Race` in
-[_prototypes/game/src/race.ts](../../_prototypes/game/src/race.ts),
-lifted almost unchanged into
-[_prototypes/multiplayer/shared/race.ts](../../_prototypes/multiplayer/shared/race.ts).
-Keep `Race` free of rendering and DOM: it has to run on the server too, and one
+reference implementation is `Race` in [web/game/race.ts](../../web/game/race.ts).
+
+Keep `Race` free of rendering and DOM. It has to run on the server too, and one
 physics implementation shared by client and server is the whole defence against
-client/server divergence.
+client/server divergence. It currently lives under `web/` only because that is
+where the game landed first; the moment the server needs to simulate a pilot it
+has to become a workspace package that both `web/` and `api/` import, not a
+second copy.
 
 ## Typing
 

@@ -53,7 +53,7 @@ export function LoadoutPanel() {
         <div className="min-w-0">
           <b className="block font-display text-base">{ship.name}</b>
           <span className="text-2xs text-ink-dim">
-            {ship.perk} · {ship.rarity}
+            {ship.rarity}
           </span>
         </div>
         <Link

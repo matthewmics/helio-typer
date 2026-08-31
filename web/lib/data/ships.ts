@@ -1,5 +1,14 @@
 import type { Ship } from "@/lib/types";
 
+/**
+ * The hangar roster.
+ *
+ * Cosmetics only. These entries used to carry Thrust / Decay resist / Hull
+ * numbers and a stat-affecting perk each, which was ruled out: a purchasable
+ * stat is a second variable inside the exact number the game exists to measure.
+ * What differentiates a ship now is how it looks, so `flavor` describes the
+ * paint and nothing else.
+ */
 export const SHIPS: Ship[] = [
   {
     id: "vanguard",
@@ -8,11 +17,9 @@ export const SHIPS: Ship[] = [
     hull: "#e6e9f7",
     fin: "#4fd8ff",
     finShadow: "#2a9fc2",
-    stats: { Thrust: 60, "Decay resist": 60, Hull: 60 },
     owned: true,
-    perk: "Balanced starter",
-    perkText:
-      "No bonuses and no penalties. The baseline every other ship is measured against.",
+    flavor:
+      "Service white with a cyan tail flash. The airframe every other silhouette is a variation on.",
   },
   {
     id: "needle",
@@ -21,11 +28,9 @@ export const SHIPS: Ship[] = [
     hull: "#dfe6ff",
     fin: "#a678ff",
     finShadow: "#6f4fc4",
-    stats: { Thrust: 88, "Decay resist": 30, Hull: 45 },
     owned: true,
-    perk: "Glass cannon",
-    perkText:
-      "Builds thrust noticeably faster, but it bleeds away faster too. Rewards sustained rhythm and punishes any pause.",
+    flavor:
+      "Narrowed nose and swept violet fins. Reads as fast standing still, which is the entire idea.",
   },
   {
     id: "bulwark",
@@ -34,11 +39,9 @@ export const SHIPS: Ship[] = [
     hull: "#f2e9d8",
     fin: "#4dffb4",
     finShadow: "#22a06b",
-    stats: { Thrust: 42, "Decay resist": 70, Hull: 95 },
     owned: true,
-    perk: "Extra plating",
-    perkText:
-      "One additional hull segment. Slower to get moving, but survives the mistakes that end other runs.",
+    flavor:
+      "Heavy bone-coloured plating with green trim, panel lines picked out like a working freighter.",
   },
   {
     id: "ember",
@@ -47,11 +50,9 @@ export const SHIPS: Ship[] = [
     hull: "#ffe3d1",
     fin: "#ff8a4d",
     finShadow: "#c9451f",
-    stats: { Thrust: 72, "Decay resist": 78, Hull: 50 },
     owned: true,
-    perk: "Afterburn",
-    perkText:
-      "After 20 consecutive correct characters, decay pauses briefly. Combo chasing becomes the main play.",
+    flavor:
+      "Scorched orange down the flanks, as though it has already made the trip once.",
   },
   {
     id: "phantom",
@@ -60,12 +61,10 @@ export const SHIPS: Ship[] = [
     hull: "#d5dcf0",
     fin: "#4fd8ff",
     finShadow: "#1d5f77",
-    stats: { Thrust: 65, "Decay resist": 65, Hull: 55 },
     owned: false,
     cost: 1800,
-    perk: "Soft landing",
-    perkText:
-      "A mistake cuts thrust by 60 percent instead of dropping it to zero. Less punishing, but never reaches top speed as easily.",
+    flavor:
+      "Cold grey that goes nearly matte against deep space, with a thin ice-blue edge light.",
   },
   {
     id: "halcyon",
@@ -74,12 +73,10 @@ export const SHIPS: Ship[] = [
     hull: "#fff4d6",
     fin: "#ffb84d",
     finShadow: "#c98b1f",
-    stats: { Thrust: 80, "Decay resist": 82, Hull: 70 },
     owned: false,
     cost: 5000,
-    perk: "Second wind",
-    perkText:
-      "Once per race, the first hull segment lost is restored after 10 clean seconds. Rewards recovering instead of tilting.",
+    flavor:
+      "Warm gold leaf over cream. Impractical, conspicuous, and entirely the point.",
   },
 ];
 

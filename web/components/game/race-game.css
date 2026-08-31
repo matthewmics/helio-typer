@@ -1,0 +1,461 @@
+/*
+ * The HUD, lifted from the Excalibur spike's index.html (deleted 2026-08-31,
+ * recoverable from git at c4db0f8).
+ *
+ * Plain global CSS rather than a CSS module, and that is not laziness: the
+ * per-character spans are built as an HTML string inside game/ui/hud.ts, so the
+ * class names it writes (`ch`, `correct`, `current`, `pending`) and the ones it
+ * toggles (`flash`, `stalled`) have to survive to the browser unmangled. A
+ * module would hash them and the prompt would render unstyled.
+ *
+ * Everything is nested under .race-root so nothing here escapes into the rest of
+ * the app. The prototype could style html and body directly because the page was
+ * only ever the game.
+ */
+
+.race-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #05060a;
+  font-family: var(--font-chakra-petch), "Segoe UI", system-ui, sans-serif;
+  color: #e8ecff;
+}
+
+.race-root canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.race-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---- typing prompt ---- */
+.race-root #promptBox {
+  position: absolute;
+  bottom: 5%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(700px, 82vw);
+  max-width: 82vw;
+  box-sizing: border-box;
+  background: rgba(10, 12, 24, 0.72);
+  border: 1px solid rgba(120, 140, 255, 0.25);
+  border-radius: 12px;
+  padding: 20px 26px;
+  font-size: 24px;
+  line-height: 1.55;
+  letter-spacing: 0.3px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  transition:
+    border-color 0.08s,
+    background 0.08s;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+
+.race-root #promptBox.flash {
+  border-color: #ff4d5e;
+  background: rgba(60, 10, 16, 0.75);
+}
+
+/* ---- hull breach: the prompt stays readable, it just goes dead ----
+   The sentence is never covered up. You can still read ahead and see exactly
+   where you will resume; the panel just reads as powered down and being
+   electrocuted, which is a much better signal than a modal that hides the one
+   thing you are looking at. */
+.race-root #promptBox.stalled {
+  border-color: #ff4d5e;
+  background: rgba(40, 6, 10, 0.8);
+  animation: race-stalled-shake 0.16s steps(2) infinite;
+}
+
+/* Every step keeps the -50% that centres the box: a bare translateX here would
+   replace it and throw the panel off to one side mid-stall. */
+@keyframes race-stalled-shake {
+  0% {
+    transform: translateX(-50%);
+  }
+  25% {
+    transform: translate(calc(-50% - 2px), 1px);
+  }
+  50% {
+    transform: translate(calc(-50% + 2px), -1px);
+  }
+  75% {
+    transform: translate(calc(-50% - 1px), 1px);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Greyed out and dimmed: grayscale drains the amber cursor and the blue typed
+   text to the same dead grey, so nothing on the panel looks like it is still
+   accepting input. */
+.race-root #promptBox.stalled #promptText {
+  filter: grayscale(1) brightness(0.66);
+  opacity: 0.5;
+}
+
+.race-root #promptBox.stalled .ch.current {
+  animation: none;
+}
+
+/* Arcs flickering across the dead panel. */
+.race-root #stallFx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+}
+
+.race-root #promptBox.stalled #stallFx {
+  display: block;
+}
+
+.race-root #stallFx svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.race-root #stallFx path {
+  fill: none;
+  stroke: #dff0ff;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* The box is not square, so the SVG stretches; this keeps the bolts an even
+     thickness instead of smearing them out horizontally. */
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 5px #7fd0ff);
+  opacity: 0;
+  animation: race-arc 1.05s steps(1, end) infinite;
+}
+
+/* Deliberately mismatched durations, so the six never resynchronise into a
+   visible marching pattern around the frame. */
+.race-root #stallFx path:nth-child(2) {
+  animation-duration: 0.83s;
+  animation-delay: 0.19s;
+}
+.race-root #stallFx path:nth-child(3) {
+  animation-duration: 1.27s;
+  animation-delay: 0.41s;
+}
+.race-root #stallFx path:nth-child(4) {
+  animation-duration: 0.71s;
+  animation-delay: 0.08s;
+}
+.race-root #stallFx path:nth-child(5) {
+  animation-duration: 0.94s;
+  animation-delay: 0.53s;
+}
+.race-root #stallFx path:nth-child(6) {
+  animation-duration: 1.13s;
+  animation-delay: 0.29s;
+}
+
+/* Short bursts, several per cycle: a bolt that is lit half the time reads as a
+   drawn line rather than as a discharge, but too few and the panel just looks
+   dark. */
+@keyframes race-arc {
+  0%,
+  3% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.95;
+  }
+  9% {
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.65;
+  }
+  15%,
+  29% {
+    opacity: 0;
+  }
+  32% {
+    opacity: 0.9;
+  }
+  36%,
+  60% {
+    opacity: 0;
+  }
+  63% {
+    opacity: 0.85;
+  }
+  67% {
+    opacity: 0;
+  }
+  70% {
+    opacity: 0.5;
+  }
+  73%,
+  88% {
+    opacity: 0;
+  }
+  91% {
+    opacity: 0.8;
+  }
+  95%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.race-root #promptBox.stalled::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255, 70, 90, 0.13), transparent 72%);
+  animation: race-breach-flash 0.44s steps(2) infinite;
+}
+
+@keyframes race-breach-flash {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Status chip straddling the top border, so the countdown never sits on top of
+   a word. */
+.race-root #stallBadge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  background: #2a0810;
+  border: 1px solid #ff4d5e;
+  color: #ff8a95;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  white-space: nowrap;
+  box-shadow: 0 0 14px rgba(255, 77, 94, 0.45);
+}
+
+.race-root #promptBox.stalled #stallBadge {
+  display: flex;
+}
+
+.race-root #stallBadge b {
+  color: #fff;
+  letter-spacing: 1px;
+}
+
+.race-root #stallBadge .spark {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff4d5e;
+  box-shadow: 0 0 8px #ff4d5e;
+  animation: race-breach-flash 0.5s steps(2) infinite;
+}
+
+/* Blue rather than green: on red-green colour blindness (the common kind) a
+   mint green desaturates toward the same grey as .ch.pending, so the two stop
+   reading as different. Blue stays distinct from grey under every common form
+   of colour blindness. */
+.race-root .ch.correct {
+  color: #7ac0ff;
+}
+
+/* The "next key" marker cannot lean on hue alone, since that is exactly what is
+   hard to read for a colour-blind player. A solid amber block is a brightness
+   and shape cue instead of a colour one, and the pulse adds a motion cue on top.
+   Padding is vertical-only and font-weight is left alone: either one changes
+   this character's horizontal advance width, and since the class hops to a new
+   character every keystroke, that made every character after it shift sideways
+   in sync with your typing. */
+.race-root .ch.current {
+  color: #1a1200;
+  background: #ffcf6b;
+  border-radius: 3px;
+  padding: 3px 0;
+  animation: race-cur-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes race-cur-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(255, 207, 107, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 13px rgba(255, 207, 107, 0.85);
+  }
+}
+
+.race-root .ch.pending {
+  color: #6a7190;
+}
+
+/* ---- stats ---- */
+.race-root #statsBar {
+  position: absolute;
+  top: 3%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 28px;
+  font-size: 14px;
+  color: #9aa3c7;
+  letter-spacing: 0.5px;
+}
+
+.race-root #statsBar b {
+  color: #e8ecff;
+  font-size: 16px;
+}
+
+/* ---- the run rail: one tick per body, so you can see what is next ---- */
+.race-root #rail {
+  position: absolute;
+  right: 26px;
+  top: 60px;
+  bottom: 60px;
+  width: 2px;
+  background: rgba(120, 140, 255, 0.22);
+}
+
+.race-root #rail .tick {
+  position: absolute;
+  right: -3px;
+  width: 8px;
+  height: 2px;
+  background: rgba(120, 140, 255, 0.45);
+}
+
+.race-root #rail .tick.passed {
+  background: rgba(109, 255, 176, 0.7);
+}
+
+.race-root #rail .tick span {
+  position: absolute;
+  right: 14px;
+  top: -7px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #59608a;
+  white-space: nowrap;
+}
+
+.race-root #rail .tick.passed span {
+  color: #6dffb0;
+}
+
+.race-root #rail .finish {
+  position: absolute;
+  right: -5px;
+  top: -1px;
+  width: 12px;
+  height: 3px;
+  background: #9fd6ff;
+  box-shadow: 0 0 8px #9fd6ff;
+}
+
+.race-root #railMarker {
+  position: absolute;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #7a8bff;
+  box-shadow: 0 0 10px rgba(122, 139, 255, 0.9);
+  transform: translateY(-50%);
+}
+
+/* ---- end screen ---- */
+.race-root #endScreen {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(3, 4, 10, 0.85);
+  pointer-events: all;
+}
+
+.race-root #endScreen.show {
+  display: flex;
+}
+
+.race-root #endScreen h1 {
+  font-size: 40px;
+  margin: 0;
+}
+
+.race-root #endScreen .row {
+  color: #b7c0ea;
+  font-size: 16px;
+}
+
+.race-root #endScreen button {
+  margin-top: 18px;
+  cursor: pointer;
+  background: #4c5bff;
+  border: none;
+  color: white;
+  font-size: 15px;
+  padding: 10px 22px;
+  border-radius: 8px;
+}
+
+.race-root #endScreen button:hover {
+  background: #6272ff;
+}
+
+.race-root #hint {
+  position: absolute;
+  bottom: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  color: #6a7190;
+}
+
+/* ---- boot and failure states, which the prototype had no need for ---- */
+.race-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  color: #9aa3c7;
+  font-size: 14px;
+}
+
+.race-status code {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 12px;
+  color: #e8ecff;
+  background: rgba(120, 140, 255, 0.12);
+  border: 1px solid rgba(120, 140, 255, 0.25);
+  border-radius: 6px;
+  padding: 6px 10px;
+}

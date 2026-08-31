@@ -1,5 +1,0 @@
-node_modules/
-dist/
-# Mounted in from ../shared at runtime, never edited in place.
-server/src/shared/
-client/src/shared/
