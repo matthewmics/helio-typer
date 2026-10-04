@@ -23,14 +23,6 @@ export type Ship = {
   flavor: string;
 };
 
-export type GameMode = {
-  id: string;
-  name: string;
-  blurb: string;
-  glyph: string;
-  tag?: { label: string; tone: "success" | "special" | "gold" };
-};
-
 export type RankedPilot = {
   name: string;
   wpm: number;

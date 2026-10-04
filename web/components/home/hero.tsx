@@ -1,26 +1,40 @@
-import { RocketMark } from "@/components/rocket-mark";
 import { HeroActions } from "@/components/home/hero-actions";
+import { ShipAnimation } from "@/components/ship-animation";
+import { DEFAULT_ROCKET } from "@/game/resources";
+import type { Viewer } from "@/lib/viewer";
 
-export function Hero() {
+/**
+ * The one thing to do here: find a match. There is a single way to race, and
+ * every race counts toward the rankings, so the hero carries the whole call to
+ * action. The rocket beside it is the race's own sprite, flying at cruise.
+ */
+export function Hero({ viewer }: { viewer: Viewer }) {
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-line-hi bg-[radial-gradient(circle_at_82%_18%,rgba(79,216,255,0.18)_0%,transparent_48%),linear-gradient(150deg,var(--color-panel-hi),var(--color-panel))] p-8">
-      <RocketMark
-        detail="full"
-        className="absolute -bottom-3.5 right-6 w-29.5 animate-float opacity-50"
-      />
+    <section className="overflow-hidden rounded-3xl border border-line-hi bg-[radial-gradient(circle_at_80%_35%,rgba(79,216,255,0.16)_0%,transparent_50%),linear-gradient(150deg,var(--color-panel-hi),var(--color-panel))] px-6 py-8 sm:px-10 sm:py-10">
+      <div className="flex items-center gap-10">
+        <div className="min-w-0 flex-1">
+          <p className="mb-3 font-display text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+            {viewer === "user"
+              ? "Season 1 · every race is ranked"
+              : "Season 1 · guests race unranked"}
+          </p>
+          <h1 className="mb-3 max-w-[15ch] font-display text-3xl font-bold md:text-4xl">
+            Accuracy is altitude.
+          </h1>
+          <p className="mb-7 max-w-[46ch] text-base leading-relaxed text-ink-dim">
+            Every correct keystroke builds thrust. Thrust bleeds away the moment
+            you hesitate. One mistake halves your speed and cracks the hull.
+          </p>
+          <HeroActions />
+        </div>
 
-      <p className="mb-2 font-display text-2xs font-semibold uppercase tracking-[0.2em] text-accent">
-        Season 1 · Week 3
-      </p>
-      <h2 className="mb-2 max-w-[15ch] font-display text-3xl font-bold">
-        Accuracy is altitude.
-      </h2>
-      <p className="mb-6 max-w-[44ch] text-base leading-relaxed text-ink-dim">
-        Every correct keystroke builds thrust. Thrust bleeds away the moment you
-        hesitate. One mistake halves your speed and cracks the hull.
-      </p>
-
-      <HeroActions />
+        <ShipAnimation
+          id={DEFAULT_ROCKET}
+          speed={70}
+          scale={1.5}
+          className="hidden shrink-0 animate-float md:block"
+        />
+      </div>
     </section>
   );
 }

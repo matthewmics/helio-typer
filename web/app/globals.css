@@ -12,10 +12,10 @@
  *   line / line-hi                  borders, resting and emphasized
  *   ink / ink-dim / ink-faint       text, primary to least prominent
  *   accent                          primary action, thrust, "you"
- *   gold                            contracts, achievements, first place
+ *   gold                            achievements, first place
  *   success                         live, ready, positive trend
  *   danger                          mistakes, hull loss, negative trend
- *   special                         secondary tags, e.g. solo modes
+ *   special                         a secondary badge tone
  */
 @theme {
   --color-void: #070912;

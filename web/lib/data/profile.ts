@@ -15,20 +15,20 @@ export const PILOT = {
   shipId: "vanguard",
 };
 
-export const RECENT_RACES: RaceResult[] = [
-  { place: "1st", detail: "Quick match · 5 pilots", score: "94 wpm" },
-  { place: "3rd", detail: "Ranked · 5 pilots", score: "81 wpm" },
-  { place: "DNF", detail: "Sudden death · hull breach", score: "62%" },
-  { place: "2nd", detail: "Quick match · 4 pilots", score: "88 wpm" },
+/**
+ * There is one way to race and every race is ranked, so a result is a place
+ * among six pilots and nothing else. A breach stalls a ship rather than ending
+ * its run, so every one of these finished.
+ */
+export const RACE_HISTORY: RaceResult[] = [
+  { place: "1st", detail: "6 pilots · 4h ago", score: "94 wpm" },
+  { place: "3rd", detail: "6 pilots · 5h ago", score: "81 wpm" },
+  { place: "5th", detail: "6 pilots · stalled twice · 6h ago", score: "62 wpm" },
+  { place: "2nd", detail: "6 pilots · yesterday", score: "88 wpm" },
+  { place: "1st", detail: "6 pilots · yesterday", score: "91 wpm" },
 ];
 
-export const RACE_HISTORY: RaceResult[] = [
-  { place: "1st", detail: "Quick match · 5 pilots · 4h ago", score: "94 wpm" },
-  { place: "3rd", detail: "Ranked · 5 pilots · 5h ago", score: "81 wpm" },
-  { place: "DNF", detail: "Sudden death · hull breach at 62%", score: "62%" },
-  { place: "2nd", detail: "Quick match · 4 pilots · yesterday", score: "88 wpm" },
-  { place: "1st", detail: "Private room · 3 pilots · yesterday", score: "91 wpm" },
-];
+export const RECENT_RACES = RACE_HISTORY.slice(0, 4);
 
 export const ACHIEVEMENTS: Achievement[] = [
   {
@@ -39,7 +39,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   },
   {
     name: "Century club",
-    requirement: "Break 100 WPM in a ranked race",
+    requirement: "Break 100 WPM in a race",
     glyph: "▲",
     unlocked: true,
   },
@@ -51,7 +51,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   },
   {
     name: "Untouchable",
-    requirement: "Win 5 sudden death races in a row",
+    requirement: "Win 5 races in a row",
     glyph: "☠",
     unlocked: false,
   },

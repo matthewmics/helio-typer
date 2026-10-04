@@ -1,50 +1,55 @@
 import { GuestCard } from "@/components/auth/guest-card";
-import { DailyContract } from "@/components/home/daily-contract";
 import { Hero } from "@/components/home/hero";
-import { ModeList } from "@/components/home/mode-list";
+import { HowItWorks } from "@/components/home/how-it-works";
+import { TopPilots } from "@/components/home/top-pilots";
 import { RaceHistoryList } from "@/components/race-history-list";
-import { Card, CardStack, CardTitle } from "@/components/ui/card";
+import { Card, CardLink, CardStack, CardTitle } from "@/components/ui/card";
 import { StatTile, StatTileGrid } from "@/components/ui/stat-tile";
 import { PILOT, RECENT_RACES } from "@/lib/data/profile";
 import { getViewer } from "@/lib/viewer";
 
+/**
+ * One way to race, and every race is ranked, so the page is built around the
+ * single Find match in the hero. A guest gets the rules first; a signed-in pilot
+ * gets their numbers first and the rules last.
+ */
 export default async function HomePage() {
   const viewer = await getViewer();
 
-  return (
-    <div className="grid items-start gap-5 lg:grid-cols-[1.55fr_1fr]">
+  if (viewer === "guest") {
+    return (
       <CardStack>
-        <Hero />
-
-        {viewer === "user" ? (
-          <>
-            <StatTileGrid>
-              <StatTile value={PILOT.wpm} label="Your WPM" />
-              <StatTile value={PILOT.accuracy} label="Accuracy" tone="success" />
-              <StatTile value={`#${PILOT.globalRank}`} label="Global rank" />
-              <StatTile value={PILOT.wins} label="Races won" />
-            </StatTileGrid>
-
-            <DailyContract />
-          </>
-        ) : (
+        <Hero viewer={viewer} />
+        <HowItWorks />
+        <div className="grid items-start gap-5 lg:grid-cols-[1.55fr_1fr]">
           <GuestCard />
-        )}
+          <TopPilots viewer={viewer} />
+        </div>
       </CardStack>
+    );
+  }
 
-      <CardStack>
+  return (
+    <CardStack>
+      <Hero viewer={viewer} />
+
+      <StatTileGrid>
+        <StatTile value={PILOT.wpm} label="Your WPM" />
+        <StatTile value={PILOT.accuracy} label="Accuracy" tone="success" />
+        <StatTile value={`#${PILOT.globalRank}`} label="Global rank" />
+        <StatTile value={PILOT.wins} label="Races won" />
+      </StatTileGrid>
+
+      <div className="grid items-start gap-5 lg:grid-cols-[1.55fr_1fr]">
         <Card>
-          <CardTitle>Game modes</CardTitle>
-          <ModeList />
+          <CardTitle>Recent races</CardTitle>
+          <RaceHistoryList races={RECENT_RACES} />
+          <CardLink href="/profile">Race history →</CardLink>
         </Card>
+        <TopPilots viewer={viewer} />
+      </div>
 
-        {viewer === "user" && (
-          <Card>
-            <CardTitle>Recent races</CardTitle>
-            <RaceHistoryList races={RECENT_RACES} />
-          </Card>
-        )}
-      </CardStack>
-    </div>
+      <HowItWorks />
+    </CardStack>
   );
 }
