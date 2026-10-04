@@ -99,7 +99,11 @@ It is there so the multi-key scripts stay legal if Redis itself is ever clustere
 
 ## Verifying it
 
-`pnpm --filter api mm:sim <scenario>` drives real socket clients against a
-running api. Scenarios: `solo` (bot fill), `decline`, `timeout`, and `cluster`,
-which needs a second instance on port 3001 and is the only one that actually
-exercises the cross-instance path.
+There is no automated check right now. The socket-client harness that used to
+drive these flows (`api/tools/mm-sim.mjs`) was removed on 2026-10-04, with a
+better way to test and simulate planned for later, possibly alongside the admin
+site. It is still in git history at commit `a6f311e` if it is needed before then.
+
+Until that exists, remember that the cross-instance path only breaks with two or
+more api instances running. A single-instance test, manual or otherwise, does
+not exercise it.
