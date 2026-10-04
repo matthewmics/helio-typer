@@ -17,6 +17,60 @@
       "label": "Marauder",
       "atlas": "marauder.json",
       "image": "marauder.png"
+    },
+    {
+      "id": "bulwark",
+      "label": "Bulwark",
+      "atlas": "bulwark.json",
+      "image": "bulwark.png"
+    },
+    {
+      "id": "halcyon",
+      "label": "Halcyon",
+      "atlas": "halcyon.json",
+      "image": "halcyon.png"
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini",
+      "atlas": "gemini.json",
+      "image": "gemini.png"
+    },
+    {
+      "id": "visitor",
+      "label": "Visitor",
+      "atlas": "visitor.json",
+      "image": "visitor.png"
+    },
+    {
+      "id": "sunjammer",
+      "label": "Sunjammer",
+      "atlas": "sunjammer.json",
+      "image": "sunjammer.png"
+    },
+    {
+      "id": "pioneer",
+      "label": "Pioneer",
+      "atlas": "pioneer.json",
+      "image": "pioneer.png"
+    },
+    {
+      "id": "junker",
+      "label": "Junker",
+      "atlas": "junker.json",
+      "image": "junker.png"
+    },
+    {
+      "id": "manta",
+      "label": "Manta",
+      "atlas": "manta.json",
+      "image": "manta.png"
+    },
+    {
+      "id": "prism",
+      "label": "Prism",
+      "atlas": "prism.json",
+      "image": "prism.png"
     }
   ]
 }

@@ -23,6 +23,15 @@ Files, all in `assets/rockets/`:
 | `vanguard.png` / `.json` | one rocket: sheet + frame rects + animations |
 | `kestrel.png` / `.json` | " |
 | `marauder.png` / `.json` | " |
+| `bulwark.png` / `.json` | " |
+| `halcyon.png` / `.json` | " |
+| `gemini.png` / `.json` | " |
+| `visitor.png` / `.json` | " |
+| `sunjammer.png` / `.json` | " |
+| `pioneer.png` / `.json` | " |
+| `junker.png` / `.json` | " |
+| `manta.png` / `.json` | " |
+| `prism.png` / `.json` | " |
 | `index.json` | the roster — what rockets exist |
 | `atlas.js` | every atlas as `window.ROCKET_ATLASES`, for `file://` loading |
 | `gen-rockets.mjs` | the generator — this is the source of truth for the art |
@@ -45,7 +54,7 @@ cache-bust every skin because you added one.
 ## Adding a rocket
 
 1. Add a geometry object (`hw` profile, `nozzles`, `exhaust`, `arcPoints`) next
-   to `shipA` / `shipB` / `shipC`.
+   to `shipA` through `shipL`.
 2. Add a `drawShipX(part)` function — see the `part()` note under *Tweaking*.
 3. Register it in `SHIP_DEF`, and add a `SHIPS` + `FLAME` palette entry.
 4. Add one line to `ROSTER`.
@@ -68,6 +77,14 @@ exhaust: { x: 0, y: 38 }   // where the blastoff cloud, flash and sparks radiate
 overlap, drop their `alpha` — the blending is additive, so overlapping plumes at
 full alpha sum to flat white and throw away the ship's exhaust colour. That's
 why the Marauder's twin engines sit at `0.78`.
+
+Two optional extras, both unused by the first six ships:
+
+- A nozzle can carry its own flame palette as `pal`, overriding the ship's
+  `FLAME` entry for that one plume. Prism uses this for its three coloured
+  beams.
+- A `FLAME` palette can list `sparks`, an array of colours its sparks are drawn
+  from instead of its hot and inner tones.
 
 Rerun the generator. You get `<id>.png` + `<id>.json`, and the index picks it up
 automatically. Nothing else changes — existing sheets are byte-identical.
@@ -94,13 +111,57 @@ gunmetal instead of pale cream, a hostile visor slit instead of a round
 porthole, forward barbs, huge raked scythe wings, and twin engines. Violent
 **violet** exhaust, two full plumes.
 
+**Bulwark (`D`)**: a heavy lander, short and wide where the others are tall
+and narrow. Glass dome cockpit with an antenna, olive armoured hab with a
+hazard-striped band, RCS pods on the flanks, landing legs splayed out past the
+hull, and a main engine between two verniers. **Gold** exhaust, three plumes.
+
+**Halcyon (`E`)**: a slender jade needle threaded through a wide gold ring
+wing, so it is the only silhouette with gaps in it. Gold nose tip, long rose
+canopy, single engine. **Green** exhaust.
+
+**Gemini (`F`)**: two indigo hulls flown as one, each with a crimson nose and
+its own engine, joined by a bridge wing with the cockpit pod slung between
+them. The only ship with two noses. **Crimson** exhaust, two separate plumes.
+
+**Visitor (`G`)**: a flying saucer, the widest and flattest silhouette. Chrome
+disc ringed with running lights, a glass dome with its pilot looking out, and
+an emitter underneath instead of an engine bell. **Lime** exhaust, one wide
+beam.
+
+**Sunjammer (`H`)**: a solar sail. A small white craft hanging under a great
+diamond of iridescent foil on two booms, so it is widest at the top. **White**
+ion exhaust.
+
+**Pioneer (`I`)**: a heavy lifter stacked in stages. Red escape tower,
+capsule, then each stage wider than the one above in a black and white roll
+pattern. **Indigo** exhaust, a tight cluster of three.
+
+**Junker (`J`)**: bolted together from spare parts, and the only ship that is
+not symmetrical. Big engine pod on one side, small on the other, a rusty
+patched hull, an off-centre cockpit lamp and a crane arm. **Teal** exhaust,
+two plumes of different sizes.
+
+**Manta (`K`)**: a flying wing with no fins and hardly any fuselage. Broad
+petrol-blue wing with its tips swept down, pale shoulder marks, and two horns
+at the front. **Pink** exhaust, twin plumes.
+
+**Prism (`L`)**: a crystal ship. A faceted gem held in gold claws on a slender
+pearl body. Its exhaust is three thin beams, red, green and violet, that blend
+to white where they overlap and leave coloured fringes either side, with
+sparks of every colour. Additive shells always mix toward white, so a single
+plume cannot show bands like this.
+
 Two rules hold the set together:
 
-- **Silhouette first.** Each ship is a different shape, not a recolour — you
-  should be able to tell them apart as black cutouts.
-- **Exhaust colour is the player ID.** Orange / blue / violet stay separable at
-  a glance in a crowded race, which is why plumes are per-ship rather than a
-  shared effects sheet.
+- **Silhouette first.** Each ship is a different shape, not a recolour, so
+  you should be able to tell them apart as black cutouts.
+- **Exhaust colour is the player ID.** The first six are the classic player
+  colours (orange, blue, violet, gold, green, crimson) and stay separable at a
+  glance in a full lobby of six. The second six fill the gaps (lime, teal,
+  indigo, pink) and then step off the colour wheel (white, spectrum). Twelve
+  cannot all be far apart: teal/green and indigo/blue are the closest pairs.
+  That is why plumes are per-ship rather than a shared effects sheet.
 
 The Marauder's hull is gunmetal rather than true black on purpose: the sky goes
 to near-black at the top of the climb, and a genuinely dark ship would lose its
@@ -209,12 +270,12 @@ cloud → `6–7` settling into the cruise plume.
 
 Everything worth touching is near the top of `gen-rockets.mjs`:
 
-- `SHIPS` / `FLAME` — palettes
-- `TIERS` — the speed ramp (length, width, sparks, mach diamonds, halo)
-- `shipA` / `shipB` / `shipC` — hull profiles, nozzles, lightning attach points
-- `drawShipA` / `drawShipB` / `drawShipC` — the art, as a back-to-front stack of
+- `SHIPS` / `FLAME`: palettes
+- `TIERS`: the speed ramp (length, width, sparks, mach diamonds, halo)
+- `shipA` through `shipL`: hull profiles, nozzles, lightning attach points
+- `drawShipA` through `drawShipL`: the art, as a back-to-front stack of
   `part()` calls
-- `ROSTER` — which rockets get built
+- `ROSTER`: which rockets get built
 
 Each `part()` gets its own dark keyline, which is what keeps overlapping pieces
 (fins behind hull, boosters beside fuselage) from fusing into one pale mass.
