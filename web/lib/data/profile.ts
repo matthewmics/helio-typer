@@ -11,7 +11,6 @@ export const PILOT = {
   races: 218,
   peakWpm: 103,
   hullBreaches: 12,
-  credits: 2480,
   joined: "March 2026",
   shipId: "vanguard",
 };

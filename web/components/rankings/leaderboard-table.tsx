@@ -22,8 +22,8 @@ function Trend({ delta }: { delta: number }) {
 
 export type LeaderboardTableProps = {
   pilots: RankedPilot[];
-  /** The signed-in pilot, pinned below the top of the board. */
-  you: RankedPilot & { rank: number };
+  /** The signed-in pilot, pinned below the top of the board. Guests have no row. */
+  you?: RankedPilot & { rank: number };
 };
 
 export function LeaderboardTable({ pilots, you }: LeaderboardTableProps) {
@@ -67,31 +67,35 @@ export function LeaderboardTable({ pilots, you }: LeaderboardTableProps) {
             </tr>
           ))}
 
-          <tr>
-            <td
-              colSpan={HEADINGS.length}
-              className="py-1.5 text-center tracking-[0.3em] text-ink-faint"
-            >
-              · · ·
-            </td>
-          </tr>
+          {you && (
+            <>
+              <tr>
+                <td
+                  colSpan={HEADINGS.length}
+                  className="py-1.5 text-center tracking-[0.3em] text-ink-faint"
+                >
+                  · · ·
+                </td>
+              </tr>
 
-          <tr className="bg-accent/[0.07] text-sm [&_td]:border-accent">
-            <td className={CELL}>{you.rank}</td>
-            <td className={CELL}>
-              <div className="flex items-center gap-2.5">
-                <Avatar name={you.name} size="sm" />
-                {you.name}
-                <span className="text-2xs text-accent">(you)</span>
-              </div>
-            </td>
-            <td className={cn(CELL, "font-display font-bold")}>{you.wpm}</td>
-            <td className={CELL}>{you.accuracy}</td>
-            <td className={CELL}>{you.races}</td>
-            <td className={CELL}>
-              <Trend delta={you.delta} />
-            </td>
-          </tr>
+              <tr className="bg-accent/[0.07] text-sm [&_td]:border-accent">
+                <td className={CELL}>{you.rank}</td>
+                <td className={CELL}>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar name={you.name} size="sm" />
+                    {you.name}
+                    <span className="text-2xs text-accent">(you)</span>
+                  </div>
+                </td>
+                <td className={cn(CELL, "font-display font-bold")}>{you.wpm}</td>
+                <td className={CELL}>{you.accuracy}</td>
+                <td className={CELL}>{you.races}</td>
+                <td className={CELL}>
+                  <Trend delta={you.delta} />
+                </td>
+              </tr>
+            </>
+          )}
         </tbody>
       </table>
     </div>

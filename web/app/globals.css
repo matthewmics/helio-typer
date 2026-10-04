@@ -12,10 +12,10 @@
  *   line / line-hi                  borders, resting and emphasized
  *   ink / ink-dim / ink-faint       text, primary to least prominent
  *   accent                          primary action, thrust, "you"
- *   gold                            rewards, legendary rarity, first place
+ *   gold                            contracts, achievements, first place
  *   success                         live, ready, positive trend
  *   danger                          mistakes, hull loss, negative trend
- *   special                         epic rarity, design notes
+ *   special                         secondary tags, e.g. solo modes
  */
 @theme {
   --color-void: #070912;
@@ -111,8 +111,9 @@
 @layer base {
   html {
     color-scheme: dark;
-    /* The top bar is sticky, so anchor jumps need to clear it. */
-    scroll-padding-top: 5rem;
+    /* The top bar is sticky, so anchor jumps need to clear it. It is two rows
+       tall below `lg`, about 100px. */
+    scroll-padding-top: 6.75rem;
   }
 
   body {

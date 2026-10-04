@@ -27,26 +27,3 @@ export function Meter({ value, fill = "bg-accent", className, ...props }: MeterP
     </div>
   );
 }
-
-/** A label/value line, optionally over a meter. Used for ship stats and room settings. */
-export function MeterRow({
-  label,
-  value,
-  meter,
-  fill,
-}: {
-  label: string;
-  value: React.ReactNode;
-  meter?: number;
-  fill?: string;
-}) {
-  return (
-    <div className="mb-3">
-      <div className="mb-1.5 flex justify-between text-xs text-ink-dim">
-        <span>{label}</span>
-        <b className="font-display text-ink">{value}</b>
-      </div>
-      {meter !== undefined && <Meter value={meter} fill={fill} />}
-    </div>
-  );
-}

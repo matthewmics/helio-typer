@@ -37,6 +37,11 @@ their hangar.
   rarity as a flex rather than as power.
 - **Not decided here**: whether ships cost credits, how they are unlocked, or
   whether the rarity tiers in the mockup survive.
+- **Update 2026-10-04**: settled for now by keeping the portfolio build simple.
+  No credits anywhere in the UI, no rarity, and every ship is open to every
+  pilot. The roster is the twelve rockets in `assets/rockets/`, each its own
+  silhouette and exhaust colour. Equipping is still local to the hangar: every
+  pilot in a race flies the Vanguard until the race roster carries a ship.
 
 ---
 

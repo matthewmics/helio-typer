@@ -15,7 +15,7 @@ export function HangarBrowser() {
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[1fr_330px]">
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(158px,1fr))] gap-3">
+      <div className="grid grid-cols-3 gap-3 md:grid-cols-4">
         {SHIPS.map((ship) => (
           <ShipCard
             key={ship.id}

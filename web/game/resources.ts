@@ -14,18 +14,27 @@ import { Atlas, type AtlasJson } from './atlas';
 
 const BASE = '/game';
 
-export type RocketId = 'vanguard' | 'kestrel' | 'marauder';
+/** Every rocket in assets/rockets/index.json, in roster order. */
+export const ROCKET_IDS = [
+  'vanguard', 'kestrel', 'marauder', 'bulwark', 'halcyon', 'gemini',
+  'visitor', 'sunjammer', 'pioneer', 'junker', 'manta', 'prism',
+] as const;
+
+export type RocketId = (typeof ROCKET_IDS)[number];
+
+/** What every pilot flies until the race roster carries each pilot's ship. */
+export const DEFAULT_ROCKET: RocketId = 'vanguard';
 
 export interface RocketEntry {
   id: RocketId;
   label: string;
 }
 
-/** Each sheet's path under /game, minus the extension: its `.json` and `.png` sit side by side. */
+/**
+ * Each sheet's path under /game, minus the extension: its `.json` and `.png`
+ * sit side by side. Rockets are not listed: see {@link loadRocket}.
+ */
 const SHEETS = {
-  vanguard: 'rockets/vanguard',
-  kestrel: 'rockets/kestrel',
-  marauder: 'rockets/marauder',
   planets: 'planets/planets',
   finish: 'finish/finish',
   effects: 'effects/effects',
@@ -38,11 +47,32 @@ type SheetKey = keyof typeof SHEETS;
 export let ROCKETS: RocketEntry[] = [];
 
 export interface Atlases {
-  rockets: Record<RocketId, Atlas>;
+  /** {@link DEFAULT_ROCKET}, loaded up front with the scenery. */
+  rocket: Atlas;
   planets: Atlas;
   finish: Atlas;
   effects: Atlas;
   environment: Atlas;
+}
+
+const rockets = new Map<RocketId, Promise<Atlas>>();
+
+/**
+ * One rocket's sheet, fetched on first use and shared after that.
+ *
+ * Rockets load one at a time rather than all at once with the scenery. There
+ * are a dozen of them at about half a megabyte each, and a race only draws the
+ * ones its pilots fly, so loading every sheet would have every race download
+ * skins nobody in it is using. A failure is not kept, so asking again retries.
+ */
+export function loadRocket(id: RocketId): Promise<Atlas> {
+  let sheet = rockets.get(id);
+  if (!sheet) {
+    sheet = loadSheet(`rockets/${id}`);
+    sheet.catch(() => rockets.delete(id));
+    rockets.set(id, sheet);
+  }
+  return sheet;
 }
 
 let loading: Promise<Atlases> | null = null;
@@ -67,8 +97,9 @@ export function loadArt(): Promise<Atlases> {
 
 async function fetchArt(): Promise<Atlases> {
   const keys = Object.keys(SHEETS) as SheetKey[];
-  const [roster, ...sheets] = await Promise.all([
+  const [roster, rocket, ...sheets] = await Promise.all([
     fetchJson<{ rockets: RocketEntry[] }>(`${BASE}/rockets/index.json`),
+    loadRocket(DEFAULT_ROCKET),
     ...keys.map((key) => loadSheet(SHEETS[key])),
   ]);
 
@@ -76,11 +107,7 @@ async function fetchArt(): Promise<Atlases> {
   const sheet = Object.fromEntries(keys.map((key, i) => [key, sheets[i]])) as Record<SheetKey, Atlas>;
 
   return {
-    rockets: {
-      vanguard: sheet.vanguard,
-      kestrel: sheet.kestrel,
-      marauder: sheet.marauder,
-    },
+    rocket,
     planets: sheet.planets,
     finish: sheet.finish,
     effects: sheet.effects,

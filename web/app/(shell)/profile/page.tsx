@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
+import { GuestCard } from "@/components/auth/guest-card";
 import { AchievementList } from "@/components/profile/achievement-list";
 import { KeyHeatmap } from "@/components/profile/key-heatmap";
 import { Sparkline } from "@/components/profile/sparkline";
 import { RaceHistoryList } from "@/components/race-history-list";
 import { Card, CardStack, CardTitle } from "@/components/ui/card";
-import { DesignNote } from "@/components/ui/design-note";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatTile, StatTileGrid } from "@/components/ui/stat-tile";
 import {
@@ -14,10 +14,26 @@ import {
   RACE_HISTORY,
   WPM_HISTORY,
 } from "@/lib/data/profile";
+import { getViewer } from "@/lib/viewer";
 
 export const metadata: Metadata = { title: "Profile · HelioTyper" };
 
-export default function ProfilePage() {
+export default async function ProfilePage() {
+  if ((await getViewer()) === "guest") {
+    return (
+      <>
+        <PageHeader
+          eyebrow="Pilot record"
+          title="No record yet"
+          subtitle="Guests can race, but nothing a guest flies is saved."
+        />
+        <div className="max-w-xl">
+          <GuestCard />
+        </div>
+      </>
+    );
+  }
+
   const average = Math.round(
     WPM_HISTORY.reduce((sum, value) => sum + value, 0) / WPM_HISTORY.length,
   );
@@ -76,13 +92,6 @@ export default function ProfilePage() {
           </Card>
         </CardStack>
       </div>
-
-      <DesignNote title="Why the heatmap.">
-        Per-key error tracking gives players a reason to come back and makes the
-        stats page feel diagnostic rather than decorative. It also falls out
-        almost for free, since the server already sees every keystroke for
-        anti-cheat.
-      </DesignNote>
     </>
   );
 }

@@ -1,4 +1,4 @@
-export type Rarity = "common" | "rare" | "epic" | "legend";
+import type { RocketId } from "@/game/resources";
 
 /**
  * A ship is pure cosmetics.
@@ -10,16 +10,15 @@ export type Rarity = "common" | "rare" | "epic" | "legend";
  * added back without the change being obvious in review.
  */
 export type Ship = {
-  id: string;
+  /** Also the name of its sprite sheet under /game/rockets. */
+  id: RocketId;
   name: string;
-  rarity: Rarity;
-  /** Fill colors for the ship mark: body, near fin, far fin. */
-  hull: string;
-  fin: string;
-  finShadow: string;
-  owned: boolean;
-  /** Unlock price, only meaningful while `owned` is false. */
-  cost?: number;
+  /**
+   * Plume color. In a crowded race it is how pilots tell rockets apart.
+   * `swatch` is a CSS background for the label's dot, for a plume that is more
+   * than one color; `color` still lights the preview.
+   */
+  exhaust: { label: string; color: string; swatch?: string };
   /** One line on how it looks. Never on how it flies. */
   flavor: string;
 };
@@ -39,13 +38,6 @@ export type RankedPilot = {
   races: number;
   /** Places gained (+) or lost (-) since the last board. */
   delta: number;
-};
-
-export type LobbyPilot = {
-  name: string;
-  detail: string;
-  ready: boolean;
-  isYou?: boolean;
 };
 
 export type RaceResult = {

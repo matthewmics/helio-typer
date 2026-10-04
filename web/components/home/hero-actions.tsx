@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Button, buttonStyles } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { useMatchmaking } from "@/components/matchmaking/matchmaking-provider";
 
 /** Wall-clock seconds since the pilot joined the queue. */
@@ -41,21 +40,15 @@ export function HeroActions() {
 
   return (
     <>
-      <div className="flex flex-wrap gap-3">
-        {searching ? (
-          <Button onClick={leaveQueue} variant="ghost">
-            Searching {elapsed}s · Cancel
-          </Button>
-        ) : (
-          <Button onClick={joinQueue} disabled={busy || offline}>
-            ▲ {offline ? "Server offline" : busy ? "Connecting" : "Find match"}
-          </Button>
-        )}
-
-        <Link href="/lobby" className={buttonStyles({ variant: "ghost" })}>
-          Create room
-        </Link>
-      </div>
+      {searching ? (
+        <Button onClick={leaveQueue} variant="ghost">
+          Searching {elapsed}s · Cancel
+        </Button>
+      ) : (
+        <Button onClick={joinQueue} disabled={busy || offline}>
+          ▲ {offline ? "Server offline" : busy ? "Connecting" : "Find match"}
+        </Button>
+      )}
 
       <p className="mt-5 text-xs text-ink-dim">
         <span

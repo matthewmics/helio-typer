@@ -19,7 +19,7 @@ export function DailyContract() {
             className="mt-2.5"
           />
           <span className="mt-1.5 block text-2xs text-ink-dim">
-            2 of 3 complete · reward 400 ◈
+            2 of 3 complete
           </span>
         </div>
       </div>

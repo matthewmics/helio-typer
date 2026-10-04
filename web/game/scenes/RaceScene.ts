@@ -11,7 +11,7 @@ import type { Atlas } from '../atlas';
 import { LANE_GAP } from '../config';
 import type { PilotEventKind, RaceNetClient, RacePilotInfo } from '../net';
 import { viewOfRace, type PilotView } from '../pilot';
-import type { Atlases, RocketId } from '../resources';
+import { type Atlases, loadRocket, type RocketId } from '../resources';
 import { Stage } from '../stage';
 import { Hud } from '../ui/hud';
 import { approach } from '../util';
@@ -41,7 +41,6 @@ export interface RaceSceneOptions {
  * dispose of it: under React the component that does remounts on every save.
  */
 export class RaceScene {
-  private readonly _art: Atlases;
   private readonly _net: RaceNetClient | null;
   private readonly _race: Race;
   private readonly _hud: Hud;
@@ -70,7 +69,6 @@ export class RaceScene {
   private _disposed = false;
 
   constructor(canvas: HTMLCanvasElement, art: Atlases, options: RaceSceneOptions) {
-    this._art = art;
     this._net = options.net ?? null;
     this._stage = new Stage(canvas);
 
@@ -107,7 +105,7 @@ export class RaceScene {
     this._planets = new PlanetRun(art.planets, art.effects);
     this._heliopause = new Heliopause(art.finish);
     this._effects = new Effects(art.effects);
-    this._you = this._buildField(options.youName, art.rockets.vanguard, art.effects);
+    this._you = this._buildField(options.youName, art.rocket, art.effects);
 
     this._hud = new Hud(this._race, {
       onRestart: () => this.restart(),
@@ -138,8 +136,15 @@ export class RaceScene {
     this._hud.dispose();
   }
 
+  /** Fetched on first use, so the swap lands a moment after the dev panel asks. */
   useRocket(id: RocketId): void {
-    this._you.useRocket(this._art.rockets[id]);
+    loadRocket(id)
+      .then((atlas) => {
+        if (!this._disposed) this._you.useRocket(atlas);
+      })
+      .catch(() => {
+        // The sheet did not load. Keep flying the rocket you already have.
+      });
   }
 
   restart(): void {

@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
+import { SignInButton } from "@/components/auth/sign-in-button";
 import { LeaderboardTable } from "@/components/rankings/leaderboard-table";
 import { Podium } from "@/components/rankings/podium";
-import { DesignNote } from "@/components/ui/design-note";
 import { PageHeader } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
 import { LEADERBOARD, LEADERBOARD_SCOPES } from "@/lib/data/leaderboard";
 import { PILOT } from "@/lib/data/profile";
+import { getViewer } from "@/lib/viewer";
 
 export const metadata: Metadata = { title: "Rankings · HelioTyper" };
 
-export default function RankingsPage() {
+export default async function RankingsPage() {
+  const viewer = await getViewer();
+
   return (
     <>
       <PageHeader
@@ -24,22 +27,28 @@ export default function RankingsPage() {
 
       <LeaderboardTable
         pilots={LEADERBOARD}
-        you={{
-          name: PILOT.handle,
-          wpm: PILOT.wpm,
-          accuracy: PILOT.accuracy,
-          races: PILOT.races,
-          delta: 14,
-          rank: PILOT.globalRank,
-        }}
+        you={
+          viewer === "user"
+            ? {
+                name: PILOT.handle,
+                wpm: PILOT.wpm,
+                accuracy: PILOT.accuracy,
+                races: PILOT.races,
+                delta: 14,
+                rank: PILOT.globalRank,
+              }
+            : undefined
+        }
       />
 
-      <DesignNote title="Design thought.">
-        Averaging the last 20 races instead of showing an all-time peak keeps
-        the board about current form and makes a single lucky run much harder to
-        camp on. Worth storing every race result server side regardless, so the
-        ranking formula can change later without losing history.
-      </DesignNote>
+      {viewer === "guest" && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-line bg-panel px-5 py-4">
+          <p className="text-sm text-ink-dim">
+            Guests never appear on the board. Sign in to get ranked.
+          </p>
+          <SignInButton size="sm" />
+        </div>
+      )}
     </>
   );
 }
