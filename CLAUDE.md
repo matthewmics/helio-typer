@@ -23,6 +23,11 @@ even "just this once" or in informal contexts. Use a comma, a period (splitting
 into two sentences), a colon, parentheses, or a connecting word like "and,"
 "but," or "so."
 
+**No AI attribution in git history.** Do not add `Co-Authored-By` trailers,
+"Generated with" lines, or any other AI attribution to commit messages or pull
+request descriptions. This is a portfolio project, and how AI tooling was used
+is disclosed in the README, in the author's own words, not per commit.
+
 **Design lessons locked in.** These were learned by building the thing and are
 not up for rediscovery:
 
