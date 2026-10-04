@@ -17,6 +17,16 @@ export {
 
 export const PLAYER_NAME = 'Player1';
 
+/**
+ * Horizontal spacing between pilots, in px.
+ *
+ * Six lanes at this width span 750px inside a 1280px frame, so the whole field
+ * stays on screen with room either side. You are always drawn in the middle
+ * column, so the spread is what decides how far the leaders and stragglers sit
+ * from you rather than where you sit.
+ */
+export const LANE_GAP = 150;
+
 // ---------------------------------------------------------------------------
 // Staging
 // ---------------------------------------------------------------------------
@@ -49,6 +59,17 @@ export const CLOUD_SPREAD = 3200;
 
 /** Vertical spread of the planet run, in px per unit of progress. */
 export const PLANET_SPREAD = 7200;
+
+/**
+ * Vertical spread of the field of rockets in space, in px per unit of progress
+ * between two pilots.
+ *
+ * The planets' spread at a parallax depth of 1: the rockets are the nearest
+ * layer of the same world. A pilot 1% ahead draws about 75px above you, so
+ * anyone more than roughly 5% away is off screen and shows only on the rail.
+ * Through the atmosphere the ground's fall sets the scale instead, see `fieldY`.
+ */
+export const FIELD_SPREAD = PLANET_SPREAD;
 
 /** The heliopause is not there at the start: it fades in for the final stretch. */
 export const FINISH_REVEAL_AT = 0.84;
@@ -151,23 +172,13 @@ export const PLANET_HALO_SPAN = 2.4;
 export const PLANET_HALO_OPACITY = 0.34;
 
 /**
- * Draw order. The camera is locked, so this is the whole depth story.
+ * How far past every screen edge the full-width layers draw (sky, horizon glow,
+ * ground strips, heliopause), so screen shake never exposes the edge of one.
+ *
+ * Draw order lives in `RaceScene._draw`: the camera is locked, so the order of
+ * those calls is the whole depth story.
  */
-export const Z = {
-  sky: -100,
-  stars: -90,
-  planets: -80,
-  heliopause: -70,
-  horizonGlow: -63,
-  skyline: -62,
-  hillsFar: -61,
-  hillsNear: -60,
-  pad: -50,
-  cloudsBack: -40,
-  rocket: 0,
-  cloudsFront: 10,
-  effects: 20,
-} as const;
+export const EDGE_BLEED = 48;
 
 // ---------------------------------------------------------------------------
 // Sky

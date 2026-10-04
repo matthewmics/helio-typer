@@ -3,6 +3,21 @@
 How the run is staged and drawn. Art lives in [assets/](../../assets), generated
 rather than hand-drawn, one folder per subject with its own README.
 
+## Rendering
+
+Plain Canvas 2D, no game engine. [web/game/stage.ts](../../web/game/stage.ts)
+owns the canvas, the fit-to-window scaling, the frame loop and screen shake, and
+[RaceScene](../../web/game/scenes/RaceScene.ts) draws every layer back to front.
+
+ExcaliburJS was removed on 2026-10-03. Its loader painted an engine logo and a
+progress bar over the canvas before every race, and the game used little of the
+engine beyond sprites and one particle emitter.
+
+- **No splash or loading screen.** The first frame drawn is the launch pad. A
+  loading line exists, but only fades in if fetching the art takes longer than
+  about half a second.
+- **Do not bring a game engine back** without asking first.
+
 ## The outbound run
 
 ```
@@ -22,7 +37,8 @@ launch pad -> clouds -> moon -> mars -> jupiter -> saturn
 ## Camera and framing
 
 - The camera is locked for the entire race, so world space is screen space. It
-  never pans, never zooms. `camera.shake` is the only thing that touches it.
+  never pans, never zooms. Screen shake (`Stage.shake`) is the only thing that
+  touches it.
 - The ship's screen position rises with `progress`, from `ROCKET_START_FRAC` of
   the viewport up to `FINISH_LINE_Y`.
 - The heliopause does not move. It is the edge you arrive at, so it holds
@@ -32,6 +48,13 @@ launch pad -> clouds -> moon -> mars -> jupiter -> saturn
   rather than a row of stickers at the same depth. Each body also has its own
   breathe and sway phase so no two move in step.
 - Starfield drift is cosmetic only, decoupled from actual position.
+- **Other pilots are placed relative to your ship, on the scenery's scale**
+  (`fieldY` in [view.ts](../../web/game/view.ts)): the ground's fall through the
+  atmosphere, the planets' spread in space. A pilot more than a few percent
+  ahead or behind is off screen and shows only on the rail. Do not map each
+  pilot's own progress onto the ship's climb instead: that squeezes the whole
+  race into one screen height, and a pilot a quarter of the race ahead draws
+  right beside you, in front of scenery they passed long ago.
 
 > **Unresolved.** The original locked lesson was "a fixed landmark must never
 > move toward the ship; only the ship moves." The current port satisfies that for
@@ -64,3 +87,5 @@ launch pad -> clouds -> moon -> mars -> jupiter -> saturn
 - Player name pill above the ship's nose.
 - Hull segments and a speed bar below the fins, both easing downward to stay
   clear of the growing exhaust plume.
+- The progress rail carries a dot for every other pilot, smaller and paler than
+  yours. It is the only place a pilot who is off screen still shows.

@@ -1,27 +1,29 @@
-import {
-  Actor,
-  type Animation,
-  AnimationStrategy,
-  Color,
-  EmitterType,
-  ParticleEmitter,
-  ParticleTransform,
-  type Scene,
-  type Sprite,
-  vec,
-} from 'excalibur';
-import type { Atlas } from '../atlas';
-import { Z } from '../config';
-import { rand, randInt } from '../util';
+import { type Atlas, type Clip, drawSprite, drawSpriteTransformed, frameAt, type Sprite } from '../atlas';
+import { hexRgb, rand, randInt } from '../util';
 
 /** The smoke texture is a 96px cell whose puff fills most of it. */
 const SMOKE_RADIUS = 44;
 
 const SMOKE_POOL = 72;
 
+/**
+ * How many launch-smoke greys to tint up front. Each puff picks one at random,
+ * which across a 54-puff cloud reads exactly like a fresh colour per puff without
+ * tinting a new texture every time.
+ */
+const SMOKE_TINTS = 8;
+
+const SPARK_LIFE = 0.75;
+const SPARK_SCALE = 0.4;
+/** px/s², pulling sparks down as they scatter. */
+const SPARK_GRAVITY = 130;
+
+const SPARK_COLOURS = ['#ffd98a', '#ff9d4d'];
+
 interface Puff {
-  actor: Actor;
   sprite: Sprite;
+  x: number;
+  y: number;
   vx: number;
   vy: number;
   life: number;
@@ -32,77 +34,49 @@ interface Puff {
   grow: number;
 }
 
+interface Spark {
+  sprite: Sprite;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  rotation: number;
+}
+
 /**
  * One-shot effects: the blastoff cloud, ignition and mistake sparks, and the hull
  * breach burst.
- *
- * Sparks run on Excalibur's {@link ParticleEmitter}, which fits them exactly.
- * The launch smoke does not: in 0.32 a particle with a `graphic` renders that
- * graphic at its natural size and ignores the per-particle size, growth and colour
- * fields, so the billow that makes the launch cloud read would be lost. That gets
- * its own small pool instead.
  */
 export class Effects {
+  /** Every smoke shape in every launch grey. */
+  private readonly _smoke: Sprite[] = [];
   private readonly _puffs: Puff[] = [];
-  private readonly _sparksWarm: ParticleEmitter;
-  private readonly _sparksAmber: ParticleEmitter;
-  private readonly _breach: Actor;
-  private readonly _breachAnim: Animation;
+  private readonly _sparkSprites: Sprite[];
+  private readonly _sparks: Spark[] = [];
 
-  constructor(scene: Scene, fx: Atlas) {
-    const smokeAnchor = fx.anchorOf('smoke_0');
+  private readonly _breach: Clip;
+  /** Clock time the breach burst started, or null when none is playing. */
+  private _breachAt: number | null = null;
+  private _breachX = 0;
+  private _breachY = 0;
+
+  private _clock = 0;
+
+  constructor(fx: Atlas) {
+    for (let i = 0; i < SMOKE_TINTS; i++) {
+      const grey = [randInt(118, 192), randInt(112, 186), randInt(126, 200)] as const;
+      for (let shape = 0; shape < 4; shape++) this._smoke.push(fx.tinted(`smoke_${shape}`, grey));
+    }
     for (let i = 0; i < SMOKE_POOL; i++) {
-      const shape = randInt(0, 4);
-      const sprite = fx.sprite(`smoke_${shape}`);
-      const actor = new Actor({ name: `puff${i}`, pos: vec(0, 0), z: Z.effects });
-      actor.graphics.anchor = smokeAnchor;
-      actor.graphics.use(sprite);
-      actor.graphics.visible = false;
-      scene.add(actor);
-      this._puffs.push({ actor, sprite, vx: 0, vy: 0, life: 0, maxLife: 1, size: 0, grow: 0 });
+      this._puffs.push({ sprite: this._smoke[0], x: 0, y: 0, vx: 0, vy: 0, life: 0, maxLife: 1, size: 0, grow: 0 });
     }
 
-    this._sparksWarm = Effects._sparkEmitter(fx, '#ffd98a');
-    this._sparksAmber = Effects._sparkEmitter(fx, '#ff9d4d');
-    scene.add(this._sparksWarm);
-    scene.add(this._sparksAmber);
+    this._sparkSprites = SPARK_COLOURS.map((hex) => fx.tinted('spark', hexRgb(hex)));
 
     // The breach is the one-shot at the moment hull hits zero. The rockets' own
     // `zap` covers the sustained stall that follows, so the two play in sequence.
-    this._breachAnim = fx.animation('breach', { strategy: AnimationStrategy.End });
-    this._breach = new Actor({ name: 'breach', pos: vec(0, 0), z: Z.effects });
-    this._breach.graphics.anchor = fx.anchorOf('breach_0');
-    this._breach.graphics.use(this._breachAnim);
-    this._breach.graphics.visible = false;
-    scene.add(this._breach);
-  }
-
-  private static _sparkEmitter(fx: Atlas, color: string): ParticleEmitter {
-    const sprite = fx.sprite('spark');
-    sprite.tint = Color.fromHex(color);
-    sprite.scale.setTo(0.4, 0.4);
-
-    return new ParticleEmitter({
-      pos: vec(0, 0),
-      z: Z.effects,
-      isEmitting: false,
-      emitRate: 0,
-      emitterType: EmitterType.Circle,
-      radius: 5,
-      particle: {
-        transform: ParticleTransform.Global,
-        graphic: sprite,
-        life: 750,
-        fade: true,
-        minSpeed: 90,
-        maxSpeed: 310,
-        minAngle: 0,
-        maxAngle: Math.PI * 2,
-        acc: vec(0, 130),
-        randomRotation: true,
-        z: Z.effects,
-      },
-    });
+    this._breach = fx.clip('breach');
   }
 
   /**
@@ -122,31 +96,107 @@ export class Effects {
         life: rand(0.9, 1.9),
         size: rand(9, 24),
         grow: 28,
-        tint: Color.fromRGB(randInt(118, 192), randInt(112, 186), randInt(126, 200)),
       });
     }
-    this._sparks(x, y, 13);
+    this._emitSparks(x, y, 13);
   }
 
   /** Mistake: a short spark scatter off the hull. */
   mistake(x: number, y: number): void {
-    this._sparks(x, y, 5);
+    this._emitSparks(x, y, 5);
   }
 
   /** Hull breach: white-out flash, shock ring, then the stall's zap takes over. */
   breach(x: number, y: number): void {
-    this._breach.pos.setTo(x, y);
-    this._breach.graphics.visible = true;
-    this._breachAnim.reset();
-    this._breachAnim.play();
-    this._sparks(x, y, 9);
+    this._breachAt = this._clock;
+    this._breachX = x;
+    this._breachY = y;
+    this._emitSparks(x, y, 9);
   }
 
-  private _sparks(x: number, y: number, perEmitter: number): void {
-    this._sparksWarm.pos.setTo(x, y);
-    this._sparksAmber.pos.setTo(x, y);
-    this._sparksWarm.emitParticles(perEmitter);
-    this._sparksAmber.emitParticles(perEmitter);
+  /** Wipe every live effect, for a restart. */
+  clear(): void {
+    for (const p of this._puffs) p.life = 0;
+    this._sparks.length = 0;
+    this._breachAt = null;
+  }
+
+  update(dt: number): void {
+    this._clock += dt;
+
+    // Per-frame drag of 0.96 at 60fps, expressed so it does not change with frame rate.
+    const drag = Math.pow(0.96, dt * 60);
+    for (const p of this._puffs) {
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= drag;
+      p.vy *= drag;
+      p.size += p.grow * dt;
+    }
+
+    let live = 0;
+    for (const s of this._sparks) {
+      s.life -= dt;
+      if (s.life <= 0) continue;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt + 0.5 * SPARK_GRAVITY * dt * dt;
+      s.vy += SPARK_GRAVITY * dt;
+      this._sparks[live++] = s;
+    }
+    this._sparks.length = live;
+
+    if (this._breachAt !== null && this._clock - this._breachAt >= this._breach.duration) {
+      this._breachAt = null;
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+
+    for (const p of this._puffs) {
+      if (p.life <= 0) continue;
+      ctx.globalAlpha = p.life / p.maxLife;
+      drawSprite(ctx, p.sprite, p.x, p.y, p.size / SMOKE_RADIUS);
+    }
+    ctx.globalAlpha = 1;
+
+    if (this._breachAt !== null) {
+      drawSprite(ctx, frameAt(this._breach, this._clock - this._breachAt), this._breachX, this._breachY);
+    }
+
+    for (const s of this._sparks) {
+      ctx.globalAlpha = s.life / SPARK_LIFE;
+      drawSpriteTransformed(ctx, s.sprite, s.x, s.y, SPARK_SCALE, SPARK_SCALE, s.rotation);
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Scatter sparks from (x, y), `perColour` of each colour.
+   *
+   * Each one starts somewhere inside a 5px disc along its own heading, flies
+   * outward at a random speed, falls, and fades out over its life.
+   */
+  private _emitSparks(x: number, y: number, perColour: number): void {
+    for (const sprite of this._sparkSprites) {
+      for (let i = 0; i < perColour; i++) {
+        const heading = Math.random() * Math.PI * 2;
+        const speed = rand(90, 310);
+        const offset = rand(0, 5);
+        this._sparks.push({
+          sprite,
+          x: x + Math.cos(heading) * offset,
+          y: y + Math.sin(heading) * offset,
+          vx: Math.cos(heading) * speed,
+          vy: Math.sin(heading) * speed,
+          life: SPARK_LIFE,
+          rotation: Math.random() * Math.PI * 2,
+        });
+      }
+    }
   }
 
   private _spawnPuff(o: {
@@ -157,59 +207,18 @@ export class Effects {
     life: number;
     size: number;
     grow: number;
-    tint: Color;
   }): void {
     const p = this._puffs.find((c) => c.life <= 0);
     if (!p) return; // pool exhausted: dropping a puff beats stalling the frame
 
+    p.sprite = this._smoke[randInt(0, this._smoke.length)];
+    p.x = o.x;
+    p.y = o.y;
     p.vx = o.vx;
     p.vy = o.vy;
     p.life = o.life;
     p.maxLife = o.life;
     p.size = o.size;
     p.grow = o.grow;
-    p.sprite.tint = o.tint;
-    p.actor.pos.setTo(o.x, o.y);
-    p.actor.graphics.visible = true;
-  }
-
-  update(dt: number): void {
-    // Per-frame drag of 0.96 at 60fps, expressed so it does not change with frame rate.
-    const drag = Math.pow(0.96, dt * 60);
-
-    for (const p of this._puffs) {
-      if (p.life <= 0) continue;
-
-      p.life -= dt;
-      if (p.life <= 0) {
-        p.actor.graphics.visible = false;
-        continue;
-      }
-
-      p.actor.pos.x += p.vx * dt;
-      p.actor.pos.y += p.vy * dt;
-      p.vx *= drag;
-      p.vy *= drag;
-      p.size += p.grow * dt;
-
-      const s = p.size / SMOKE_RADIUS;
-      p.sprite.scale.setTo(s, s);
-      p.actor.graphics.opacity = Math.max(0, p.life / p.maxLife);
-    }
-
-    if (this._breach.graphics.visible && this._breachAnim.done) {
-      this._breach.graphics.visible = false;
-    }
-  }
-
-  /** Wipe every live effect, for a restart. */
-  clear(): void {
-    for (const p of this._puffs) {
-      p.life = 0;
-      p.actor.graphics.visible = false;
-    }
-    this._sparksWarm.clearParticles();
-    this._sparksAmber.clearParticles();
-    this._breach.graphics.visible = false;
   }
 }

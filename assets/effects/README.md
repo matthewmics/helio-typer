@@ -34,9 +34,10 @@ That's deliberate. The prototype already needs smoke in three different moods
 high-altitude exhaust wants to be cold). Baking colour in would mean one sheet
 per mood; one white texture covers all of them.
 
-Excalibur tints via `Sprite.tint` / `ParticleEmitter`'s colour options. In raw
-canvas, multiply through an offscreen buffer — `preview.html` has a
-copy-pasteable `tinted()` helper.
+The game multiplies each tinted frame once, per pixel, onto a small canvas of its
+own and caches it (`Atlas.tinted` in [web/game/atlas.ts](../../web/game/atlas.ts)).
+`preview.html` has a shorter `tinted()` helper built on composite operations,
+which is fine for a preview but slightly lightens soft edges.
 
 | Frame | Size | Use |
 |---|---|---|

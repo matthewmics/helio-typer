@@ -373,6 +373,8 @@
   box-shadow: 0 0 8px #9fd6ff;
 }
 
+/* Markers are placed by `bottom`, so they move down by half their own height to
+   sit centred on the progress they mark, level with the landmark ticks. */
 .race-root #railMarker {
   position: absolute;
   right: -4px;
@@ -381,7 +383,20 @@
   border-radius: 50%;
   background: #7a8bff;
   box-shadow: 0 0 10px rgba(122, 139, 255, 0.9);
-  transform: translateY(-50%);
+  transform: translateY(50%);
+}
+
+/* Everyone else in the race: smaller and paler than yours, so the rail still
+   reads as you first and the field second. */
+.race-root #rail .pilot {
+  position: absolute;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c3cbf2;
+  opacity: 0.7;
+  transform: translateY(50%);
 }
 
 /* ---- end screen ---- */
@@ -448,6 +463,22 @@
   padding: 24px;
   color: #9aa3c7;
   font-size: 14px;
+}
+
+/* Loading only shows itself when it is slow. The art normally lands within a
+   frame or two, and flashing a loading screen for that long would bring back
+   the splash this page deliberately does without. */
+.race-status.is-booting {
+  animation: race-status-reveal 0.25s ease-out 0.6s both;
+}
+
+@keyframes race-status-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .race-status code {

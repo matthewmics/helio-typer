@@ -59,7 +59,27 @@ export class RedisIoAdapter extends IoAdapter {
     return server;
   }
 
-  async close(): Promise<void> {
+  /**
+   * Shut down in the right order: sockets first, then Redis.
+   *
+   * This overrides Nest's `close`, so it has to close the socket.io server
+   * itself. An earlier version only closed the Redis clients, which left the
+   * server accepting messages with a dead publisher underneath it. The next
+   * broadcast then rejected inside the adapter, where there is nothing of ours to
+   * catch it, and took the process down. In development that killed the dev
+   * server on every hot reload.
+   */
+  async close(server?: { close: (cb?: () => void) => void }): Promise<void> {
+    if (server) {
+      await new Promise<void>((resolve) => {
+        try {
+          server.close(() => resolve());
+        } catch {
+          resolve();
+        }
+      });
+    }
+
     await Promise.all([
       this.pub?.quit().catch(() => this.pub?.disconnect()),
       this.sub?.quit().catch(() => this.sub?.disconnect()),

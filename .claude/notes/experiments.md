@@ -117,6 +117,12 @@ it.
 [web/game/](../../web/game/). The original spike at `_prototypes/game/` was
 deleted the same day, since the port superseded it entirely.*
 
+*Excalibur itself was removed on 2026-10-03 in favour of plain Canvas 2D, see
+the Rendering section of [rules/game-presentation.md](../rules/game-presentation.md).
+What this entry describes carried over unchanged, with one exception: the sky
+gradient had never actually drawn under Excalibur (the pad showed black above
+the horizon glow), and now it does.*
+
 Three things differ from that spike, all of them forced by Next rather than
 chosen: art is fetched over HTTP from `/game` instead of Vite `?url` imports,
 the dev panel is omitted (the markup is simply absent and `Hud` treats every

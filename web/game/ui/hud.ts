@@ -41,6 +41,12 @@ export class Hud {
   private readonly _hint = el('hint');
 
   private readonly _ticks: { at: number; node: HTMLElement }[] = [];
+  /** One rail dot per other pilot, keyed by pilot id. */
+  private readonly _pilots = new Map<string, HTMLElement>();
+  /** Nodes this HUD added to markup it does not own, taken out again by {@link dispose}. */
+  private readonly _added: HTMLElement[] = [];
+  /** Aborting this detaches every listener the HUD attached. */
+  private readonly _listeners = new AbortController();
   private _flashT = 0;
 
   constructor(
@@ -63,7 +69,35 @@ export class Hud {
       node.appendChild(label);
       this._rail.appendChild(node);
       this._ticks.push({ at: leg.at, node });
+      this._added.push(node);
     }
+  }
+
+  /**
+   * A dot on the rail for every other pilot.
+   *
+   * The field draws to the same scale as the scenery, so anyone more than a few
+   * percent ahead or behind is off screen, and this is then the only place they
+   * show. Hidden until a pilot's first state arrives, like their rocket.
+   */
+  addPilots(ids: readonly string[]): void {
+    for (const id of ids) {
+      const node = document.createElement('div');
+      node.className = 'pilot';
+      node.hidden = true;
+      // Ahead of your own marker in the DOM, so yours always draws on top.
+      this._rail.insertBefore(node, this._railMarker);
+      this._pilots.set(id, node);
+      this._added.push(node);
+    }
+  }
+
+  /** Move a pilot's rail dot, or hide it while nothing has arrived for them. */
+  placePilot(id: string, progress: number | null): void {
+    const node = this._pilots.get(id);
+    if (!node) return;
+    node.hidden = progress === null;
+    if (progress !== null) node.style.bottom = `${progress * 100}%`;
   }
 
   /**
@@ -75,7 +109,8 @@ export class Hud {
    * has to work with none of it present.
    */
   private _bindDevPanel(callbacks: HudCallbacks): void {
-    el('btnPlayAgain').addEventListener('click', callbacks.onRestart);
+    const { signal } = this._listeners;
+    el('btnPlayAgain').addEventListener('click', callbacks.onRestart, { signal });
 
     const select = maybe<HTMLSelectElement>('selRocket');
     if (!select) return;
@@ -84,8 +119,9 @@ export class Hud {
       option.value = rocket.id;
       option.textContent = rocket.label;
       select.appendChild(option);
+      this._added.push(option);
     }
-    select.addEventListener('change', () => callbacks.onRocketChange(select.value as RocketId));
+    select.addEventListener('change', () => callbacks.onRocketChange(select.value as RocketId), { signal });
 
     const slider = (
       inputId: string,
@@ -100,7 +136,7 @@ export class Hud {
         apply(v);
         readout.textContent = format(v);
       };
-      input.addEventListener('input', handle);
+      input.addEventListener('input', handle, { signal });
       handle();
     };
 
@@ -113,7 +149,21 @@ export class Hud {
     slider('sMaxSpeed', 'vMaxSpeed', (v) => this._race.setMaxSpeed(v), (v) => v.toFixed(2));
     slider('sMinSpeed', 'vMinSpeed', (v) => (cfg.minSpeed = v), (v) => v.toFixed(2));
 
-    el('btnRestart').addEventListener('click', callbacks.onRestart);
+    el('btnRestart').addEventListener('click', callbacks.onRestart, { signal });
+  }
+
+  /**
+   * Hand the markup back the way it was found.
+   *
+   * The nodes belong to React and outlive this HUD. A remount builds a new HUD on
+   * the very same elements, so anything left behind here would be doubled up: a
+   * second set of rail ticks, or a Play again button that also restarts a race
+   * that no longer exists.
+   */
+  dispose(): void {
+    this._listeners.abort();
+    for (const node of this._added) node.remove();
+    this.hideEnd();
   }
 
   // -------------------------------------------------------------------------

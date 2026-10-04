@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -28,6 +29,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://api.heliotyper.local"
 /** Where the guest's callsign is kept so a refresh does not rename them. */
 const RESUME_KEY = "heliotyper.guest";
 
+/**
+ * Where the current race lives across the navigation into /play.
+ *
+ * sessionStorage rather than a ref: the handoff has to survive a refresh on the
+ * race page, and a tab that is not racing should not inherit one.
+ */
+const RACE_KEY = "heliotyper.race";
+
 export type MatchmakingPhase =
   | "connecting"
   | "offline"
@@ -36,8 +45,21 @@ export type MatchmakingPhase =
   | "ready_check"
   | "confirmed";
 
+/** What /play needs to join the race it was sent to. */
+export type RaceHandoff = { matchId: string; seed: number };
+
 export type MatchmakingState = {
   phase: MatchmakingPhase;
+  /** The live connection, so the race page can talk on it rather than opening a second one. */
+  socket: Socket | null;
+  /**
+   * The match to race, kept after the ready check closes.
+   *
+   * Deliberately not cleared by `dismiss`: the prompt goes away precisely
+   * because we are navigating into the race, and clearing this there would drop
+   * the handoff on the floor a frame before /play asks for it.
+   */
+  race: RaceHandoff | null;
   guest: { guestId: string; name: string } | null;
   /** Everyone waiting across the cluster, not just this instance. */
   waiting: number;
@@ -88,6 +110,55 @@ function readStored(): Stored | null {
 }
 
 /**
+ * The race handoff, kept as an external store rather than component state.
+ *
+ * It lives in sessionStorage, which the server does not have. A lazy `useState`
+ * initializer reading it rendered no race on the server and the stored race on
+ * the first client render, so every refresh into /play failed hydration. Read
+ * through `useSyncExternalStore`, React hydrates against the server's answer
+ * (no race) and re-renders with the stored one straight after.
+ *
+ * Held in memory once read, so a tab whose storage is blocked still races.
+ */
+let storedRace: RaceHandoff | null | undefined;
+const raceListeners = new Set<() => void>();
+
+function readRace(): RaceHandoff | null {
+  if (storedRace === undefined) {
+    try {
+      const raw = window.sessionStorage.getItem(RACE_KEY);
+      storedRace = raw ? (JSON.parse(raw) as RaceHandoff) : null;
+    } catch {
+      storedRace = null;
+    }
+  }
+  return storedRace;
+}
+
+/** There is no sessionStorage on the server, so as far as it knows there is never a race. */
+function readRaceOnServer(): RaceHandoff | null {
+  return null;
+}
+
+function writeRace(handoff: RaceHandoff): void {
+  storedRace = handoff;
+  try {
+    window.sessionStorage.setItem(RACE_KEY, JSON.stringify(handoff));
+  } catch {
+    // A tab that cannot remember its race still races, it just cannot be
+    // refreshed back into it.
+  }
+  for (const listener of raceListeners) listener();
+}
+
+function subscribeRace(listener: () => void): () => void {
+  raceListeners.add(listener);
+  return () => {
+    raceListeners.delete(listener);
+  };
+}
+
+/**
  * Holds the matchmaking socket for the whole shell.
  *
  * One connection, mounted once in the shell layout, because a guest identity is
@@ -105,6 +176,8 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
   const [match, setMatch] = useState<MatchmakingState["match"]>(null);
   const [confirmed, setConfirmed] = useState<MatchConfirmedMsg | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const race = useSyncExternalStore(subscribeRace, readRace, readRaceOnServer);
 
   useEffect(() => {
     const stored = readStored();
@@ -117,6 +190,7 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
       auth: stored ? { guestId: stored.guestId, token: stored.token } : {},
     });
     socketRef.current = socket;
+    setSocket(socket);
 
     socket.on("connect", () => setPhase((p) => (p === "connecting" || p === "offline" ? "idle" : p)));
     socket.on("connect_error", () => setPhase("offline"));
@@ -168,6 +242,7 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
 
     socket.on(MM_EVENTS.matchConfirmed, (msg: MatchConfirmedMsg) => {
       setConfirmed(msg);
+      writeRace({ matchId: msg.matchId, seed: msg.seed });
       setPhase("confirmed");
     });
 
@@ -189,6 +264,7 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
       socket.removeAllListeners();
       socket.close();
       socketRef.current = null;
+      setSocket(null);
     };
   }, []);
 
@@ -221,6 +297,8 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
   const value = useMemo<MatchmakingState>(
     () => ({
       phase,
+      socket,
+      race,
       guest,
       waiting,
       position,
@@ -234,7 +312,7 @@ export function MatchmakingProvider({ children }: { children: ReactNode }) {
       decline,
       dismiss,
     }),
-    [phase, guest, waiting, position, queuedAt, match, confirmed, notice, joinQueue, leaveQueue, accept, decline, dismiss],
+    [phase, socket, race, guest, waiting, position, queuedAt, match, confirmed, notice, joinQueue, leaveQueue, accept, decline, dismiss],
   );
 
   return (

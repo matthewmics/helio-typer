@@ -25,9 +25,8 @@ function pilot(label, url, behaviour) {
   sock.on('match:found', (m) => {
     state.matchId = m.matchId;
     state.events.push('found');
-    const bots = m.pilots.filter((p) => p.bot).length;
     log(
-      `MATCH FOUND ${m.matchId.slice(0, 8)}: ${m.pilots.length - bots} guests + ${bots} bots, ` +
+      `MATCH FOUND ${m.matchId.slice(0, 8)}: ${m.pilots.length} pilots, ` +
         `${m.accepted}/${m.total} accepted, ${((m.deadline - m.now) / 1000).toFixed(0)}s to answer`,
     );
     log(`  roster: ${m.pilots.map((p) => `${p.name}${p.bot ? '(bot)' : ''}`).join(', ')}`);
@@ -90,6 +89,49 @@ async function run() {
     await sleep(500);
     p.sock.emit('queue:join');
     await sleep(29000);
+    p.sock.close();
+    return p.events;
+  }
+
+  if (scenario === 'race') {
+    // Proves where the bots actually run. This client types nothing and
+    // simulates nothing: it has no Race, no physics and no timers. Anything it
+    // learns about the other pilots can only have come off the wire.
+    console.log('=== observer joins a race and reports what the server sends ===');
+    const p = pilot('observer', A, accept);
+    await sleep(500);
+    p.sock.emit('queue:join');
+
+    let welcome = null;
+    const seen = new Map();
+    let snapshots = 0;
+
+    p.sock.on('race:welcome', (m) => {
+      welcome = m;
+      p.log(`race:welcome, seed ${m.seed}, ${m.pilots.length} pilots, ${m.snapshotHz}Hz`);
+    });
+    p.sock.on('race:snapshot', (m) => {
+      snapshots++;
+      for (const [id, st] of Object.entries(m.pilots)) seen.set(id, st.progress);
+    });
+
+    p.sock.on('match:confirmed', (m) => {
+      p.log(`joining race ${m.matchId.slice(0, 8)}`);
+      p.sock.emit('race:join', { matchId: m.matchId });
+    });
+
+    await sleep(14000);
+    const first = new Map(seen);
+    await sleep(6000);
+
+    p.log(`snapshots received: ${snapshots}`);
+    p.log(`pilots the server is moving for us: ${seen.size}`);
+    for (const [id, now] of seen) {
+      const before = first.get(id) ?? 0;
+      const short = id.startsWith('bot:') ? `sim-${id.split(':').pop()}` : id.slice(0, 8);
+      p.log(`  ${short.padEnd(10)} progress ${before.toFixed(4)} -> ${now.toFixed(4)}  ${now > before ? 'ADVANCING' : 'static'}`);
+    }
+
     p.sock.close();
     return p.events;
   }

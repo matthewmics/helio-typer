@@ -1,8 +1,7 @@
-import { Actor, Canvas, type Scene, vec } from 'excalibur';
-import type { Atlas } from '../atlas';
-import { Z } from '../config';
+import { type Atlas, drawSprite, type Sprite } from '../atlas';
+import { EDGE_BLEED } from '../config';
 import type { View } from '../view';
-import { TiledStrip } from './TiledStrip';
+import { drawStrip } from './TiledStrip';
 
 const GLOW_H = 190;
 
@@ -16,87 +15,56 @@ const GLOW_H = 190;
  * vertical rate alone.
  */
 export class Ground {
-  private readonly _glow: Actor;
-  private readonly _skyline: TiledStrip;
-  private readonly _hillsFar: TiledStrip;
-  private readonly _hillsNear: TiledStrip;
-  private readonly _pad: Actor;
+  private readonly _skyline: Sprite;
+  private readonly _hillsFar: Sprite;
+  private readonly _hillsNear: Sprite;
+  private readonly _pad: Sprite;
+  /** The near ridge's solid fill, read off the bottom row of its art. */
+  private readonly _earth: string;
 
-  private readonly _env: Atlas;
-
-  constructor(scene: Scene, env: Atlas) {
-    this._env = env;
-
-    this._glow = new Actor({ name: 'horizonGlow', pos: vec(0, 0), z: Z.horizonGlow });
-    this._glow.graphics.anchor = vec(0, 1); // bottom-left sits on the horizon
-    this._glow.graphics.use(
-      new Canvas({
-        width: 8,
-        height: GLOW_H,
-        cache: true,
-        smoothing: true,
-        draw: (ctx) => {
-          const g = ctx.createLinearGradient(0, 0, 0, GLOW_H);
-          g.addColorStop(0, 'rgba(226, 130, 82, 0)');
-          g.addColorStop(1, 'rgba(255, 152, 92, 0.5)');
-          ctx.fillStyle = g;
-          ctx.fillRect(0, 0, 8, GLOW_H);
-        },
-      }),
-    );
-    scene.add(this._glow);
-
-    this._skyline = new TiledStrip(scene, 'skyline', env.frame('skyline').w, env.anchorOf('skyline'), Z.skyline);
-    this._hillsFar = new TiledStrip(scene, 'hillsFar', env.frame('hills_far').w, env.anchorOf('hills_far'), Z.hillsFar);
-    this._hillsNear = new TiledStrip(
-      scene,
-      'hillsNear',
-      env.frame('hills_near').w,
-      env.anchorOf('hills_near'),
-      Z.hillsNear,
-    );
-
+  constructor(env: Atlas) {
+    // Isolated because the sheet packs these three edge to edge, each one's solid
+    // base right on top of the next one's empty sky, which would otherwise show
+    // as a hairline across the whole screen at the top of every strip.
+    this._skyline = env.isolated('skyline');
+    this._hillsFar = env.isolated('hills_far');
+    this._hillsNear = env.isolated('hills_near');
     // The pad anchor is the deck surface, so it lines up with the ship's base
     // without any slab-thickness maths.
-    this._pad = new Actor({ name: 'pad', pos: vec(0, 0), z: Z.pad });
-    this._pad.graphics.anchor = env.anchorOf('pad');
-    this._pad.graphics.use(env.sprite('pad'));
-    scene.add(this._pad);
+    this._pad = env.sprite('pad');
+    this._earth = env.colorAt('hills_near', 0, this._hillsNear.h - 1);
   }
 
-  sync(view: View): void {
-    const base = view.groundY - view.groundFall;
-    const gone = view.groundY > view.h + 320;
+  draw(ctx: CanvasRenderingContext2D, view: View): void {
+    if (view.groundY > view.h + 320) return;
 
     // Further layers fall more slowly.
+    const base = view.groundY - view.groundFall;
     const skylineY = base + view.groundFall * 0.86;
     const farY = base + view.groundFall * 0.92;
 
-    const glowVisible = !gone;
-    this._glow.graphics.visible = glowVisible;
-    if (glowVisible) {
-      this._glow.pos.setTo(0, skylineY);
-      const canvas = this._glow.graphics.current as Canvas | undefined;
-      canvas?.scale.setTo(view.w / 8, 1);
+    // The warm band sits on the skyline's horizon and fades out upward.
+    const glow = ctx.createLinearGradient(0, skylineY - GLOW_H, 0, skylineY);
+    glow.addColorStop(0, 'rgba(226, 130, 82, 0)');
+    glow.addColorStop(1, 'rgba(255, 152, 92, 0.5)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(-EDGE_BLEED, skylineY - GLOW_H, view.w + EDGE_BLEED * 2, GLOW_H);
+
+    drawStrip(ctx, this._skyline, view.w, skylineY);
+    drawStrip(ctx, this._hillsFar, view.w, farY);
+    drawStrip(ctx, this._hillsNear, view.w, view.groundY);
+
+    // The near ridge's art stops 160px under the horizon, short of the bottom of
+    // the screen: by 12px on the pad at 16:9, and by far more in a taller window.
+    // Carry its fill on down, tucked a couple of px up under the art so the join
+    // can never show.
+    const earthTop = view.groundY - this._hillsNear.ay + this._hillsNear.h - 2;
+    const earthBottom = view.h + EDGE_BLEED;
+    if (earthTop < earthBottom) {
+      ctx.fillStyle = this._earth;
+      ctx.fillRect(-EDGE_BLEED, earthTop, view.w + EDGE_BLEED * 2, earthBottom - earthTop);
     }
 
-    const opacity = gone ? 0 : 1;
-    this._skyline.sync(view.w, skylineY, opacity, this._graphic('skyline'));
-    this._hillsFar.sync(view.w, farY, opacity, this._graphic('hills_far'));
-    this._hillsNear.sync(view.w, view.groundY, opacity, this._graphic('hills_near'));
-
-    this._pad.graphics.visible = !gone;
-    this._pad.pos.setTo(view.cx, view.groundY);
-  }
-
-  /** One sprite instance per frame name, reused across every tile of that strip. */
-  private readonly _cache = new Map<string, ReturnType<Atlas['sprite']>>();
-  private _graphic(name: string) {
-    let g = this._cache.get(name);
-    if (!g) {
-      g = this._env.sprite(name);
-      this._cache.set(name, g);
-    }
-    return g;
+    drawSprite(ctx, this._pad, view.cx, view.groundY);
   }
 }

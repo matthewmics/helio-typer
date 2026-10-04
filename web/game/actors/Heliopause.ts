@@ -1,12 +1,8 @@
-import { type Scene, type Sprite } from 'excalibur';
-import type { Atlas } from '../atlas';
-import { FINISH_LINE_Y, FINISH_REVEAL_AT, Z } from '../config';
+import { type Atlas, type Clip, frameAt } from '../atlas';
+import { FINISH_LINE_Y, FINISH_REVEAL_AT } from '../config';
 import { clamp } from '../util';
 import type { View } from '../view';
-import { TiledStrip } from './TiledStrip';
-
-/** Shimmer rate from assets/finish/finish.json. */
-const FPS = 6;
+import { drawStrip } from './TiledStrip';
 
 /**
  * The finish line: the edge of the solar system, where the solar wind stalls
@@ -22,33 +18,27 @@ const FPS = 6;
  * level, it fades in at the exact spot it will always occupy and then never moves.
  * `FINISH_LINE_Y` is the shock front itself, which is the y the ship must reach.
  *
- * NOTE: assets/finish/README.md asks for additive compositing. Excalibur 0.32 has
- * no blend-mode API on the graphics context, so this draws with normal alpha.
- * Over the near-black sky of the outer system the two are almost identical; the
- * only visible difference is that stars behind the curtain are dimmed rather than
- * shining through.
+ * Composited additively, as assets/finish/README.md asks. It is a glow sheet, so
+ * every pixel only ever brightens what is behind it, and the stars behind the
+ * curtain shine through instead of being dimmed.
  */
 export class Heliopause {
-  private readonly _frames: Sprite[];
-  private readonly _tiles: TiledStrip;
+  private readonly _shimmer: Clip;
 
-  constructor(scene: Scene, finish: Atlas) {
-    this._frames = finish.spritesOf('heliopause');
-    this._tiles = new TiledStrip(
-      scene,
-      'heliopause',
-      finish.frame('heliopause_0').w,
-      finish.anchorOf('heliopause_0'),
-      Z.heliopause,
-    );
+  constructor(finish: Atlas) {
+    this._shimmer = finish.clip('heliopause');
   }
 
-  sync(view: View): void {
+  draw(ctx: CanvasRenderingContext2D, view: View): void {
     const reveal = clamp((view.progress - FINISH_REVEAL_AT) / (1 - FINISH_REVEAL_AT), 0, 1);
+    if (reveal <= 0.001) return;
 
-    // Every tile shows the same frame, driven off the clock rather than a shared
-    // Animation instance. Two tiles a frame apart would tear the seam open.
-    const frame = this._frames[Math.floor(view.time * FPS) % this._frames.length];
-    this._tiles.sync(view.w, FINISH_LINE_Y, reveal, frame);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = reveal;
+    // Every tile shows the same frame, picked off the clock. Two tiles a frame
+    // apart would tear the seam open.
+    drawStrip(ctx, frameAt(this._shimmer, view.time), view.w, FINISH_LINE_Y);
+    ctx.restore();
   }
 }

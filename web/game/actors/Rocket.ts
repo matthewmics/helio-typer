@@ -1,17 +1,15 @@
-import { Actor, type Animation, AnimationStrategy, Canvas, Color, vec } from 'excalibur';
-import type { Atlas } from '../atlas';
-import { PLAYER_NAME, TIER_LEN, Z } from '../config';
-import type { Race } from '@heliotyper/engine';
-import { approach } from '../util';
+import { type Atlas, type Clip, drawSprite, frameAt, type Sprite } from '../atlas';
+import { LAUNCH_DURATION, TIER_LEN } from '../config';
+import type { PilotView } from '../pilot';
+import { approach, type Rgb } from '../util';
 import { SHIP_BASE_OFFSET, type View } from '../view';
 
-const NAME_W = 200;
-const NAME_H = 28;
+/** Centre of the name pill, above the ship's anchor. */
+const NAME_Y = -66;
+const NAME_FONT = '600 13px "Segoe UI", system-ui, sans-serif';
 
-const BARS_W = 240;
-const BARS_H = 48;
-/** y inside the bars canvas where the hull row starts, leaving room for its glow. */
-const BARS_PAD = 12;
+/** Top of the hull row below the ship's anchor, before it eases down clear of the plume. */
+const BARS_Y = 46;
 
 const SEG_W = 14;
 const SEG_H = 7;
@@ -21,7 +19,15 @@ const BAR_H = 6;
 /** Roughly how far the blastoff exhaust cloud reaches below the ship's base. */
 const BLASTOFF_REACH = 130;
 
-const DAMAGE_TINT = Color.fromRGB(70, 70, 78);
+const DAMAGE_TINT: Rgb = [70, 70, 78];
+const DAMAGE_SCALE = 0.28;
+
+/**
+ * How far the rocket's drawing reaches from its anchor: up to the top of the name
+ * pill, and down past the blastoff cloud and the readouts at their lowest.
+ */
+const REACH_UP = 80;
+const REACH_DOWN = 200;
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
@@ -34,88 +40,49 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 /**
- * The player's ship.
+ * One pilot's ship, local or remote.
  *
  * Every rocket sheet exposes exactly the same animation names, so nothing in here
  * branches on which rocket it is drawing: swapping ships is {@link useRocket} and
  * nothing else. Every frame in a sheet also shares the ship-centre anchor, which
  * is why the thruster, zap and blastoff frames line up at the same position with
- * no per-animation offset maths.
+ * no per-animation offset maths, even though the blastoff cell is wider.
  *
- * Layered thruster -> ship -> zap, as the sheet's README specifies, using child
- * actors because the blastoff frames use a wider cell (and therefore a different
- * relative anchor) than the rest.
+ * Drawn thruster, ship, zap, as the sheet's README specifies, then the name pill
+ * and readouts that travel with it.
  */
-export class Rocket extends Actor {
-  private readonly _thrust: Actor;
-  private readonly _hull: Actor;
-  private readonly _zap: Actor;
-  private readonly _blastoff: Actor;
-  private readonly _damage: Actor;
-  private readonly _bars: Actor;
+export class Rocket {
+  /** False until a remote pilot's first snapshot arrives. */
+  visible = true;
 
-  private _thrustAnims: Animation[] = [];
-  private _zapAnim!: Animation;
-  private _blastoffAnim!: Animation;
+  private _ship!: Sprite;
+  private _thrust!: Clip[];
+  private _zap!: Clip;
+  private _blastoff!: Clip;
+  private readonly _smoke: Sprite;
 
+  /** The callsign on the pill above the nose. */
+  private readonly _label: string;
+  private _labelW = -1;
+
+  private _pilot: PilotView | null = null;
+  private _x = 0;
+  private _y = 0;
   private _barDrop = 0;
-  private _shownTier = -1;
 
-  /** Read by the bars canvas at draw time. */
-  private _race: Race | null = null;
+  /**
+   * This rocket's own animation clock. It starts at a random offset so a field
+   * of plumes never flickers in lockstep.
+   */
+  private _clock = Math.random() * 10;
+  /** Clock time ignition was fired, or null if it never was for this rocket. */
+  private _blastoffAt: number | null = null;
 
-  constructor(atlas: Atlas) {
-    super({ name: 'rocket', pos: vec(0, 0), z: Z.rocket });
-
-    this._thrust = new Actor({ name: 'thrust', pos: vec(0, 0), z: Z.rocket - 1 });
-    this._blastoff = new Actor({ name: 'blastoff', pos: vec(0, 0), z: Z.rocket - 1 });
-    this._hull = new Actor({ name: 'hull', pos: vec(0, 0), z: Z.rocket });
-    this._damage = new Actor({ name: 'damage', pos: vec(0, 0), z: Z.rocket + 1 });
-    this._zap = new Actor({ name: 'zap', pos: vec(0, 0), z: Z.rocket + 2 });
-
-    const name = new Actor({ name: 'nameTag', pos: vec(0, -66), z: Z.rocket + 3 });
-    name.graphics.anchor = vec(0.5, 0.5);
-    name.graphics.use(
-      new Canvas({
-        width: NAME_W,
-        height: NAME_H,
-        cache: true,
-        smoothing: true,
-        draw: (ctx) => {
-          ctx.font = '600 13px "Segoe UI", system-ui, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          const pillW = ctx.measureText(PLAYER_NAME).width + 20;
-          const pillH = 20;
-          roundRect(ctx, (NAME_W - pillW) / 2, (NAME_H - pillH) / 2, pillW, pillH, 6);
-          ctx.fillStyle = 'rgba(10, 12, 24, 0.7)';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(120, 140, 255, 0.35)';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.fillStyle = '#e8ecff';
-          ctx.fillText(PLAYER_NAME, NAME_W / 2, NAME_H / 2 + 1);
-        },
-      }),
-    );
-
-    this._bars = new Actor({ name: 'bars', pos: vec(0, 46), z: Z.rocket + 3 });
-    this._bars.graphics.anchor = vec(0.5, BARS_PAD / BARS_H);
-    this._bars.graphics.use(
-      new Canvas({
-        width: BARS_W,
-        height: BARS_H,
-        cache: false,
-        smoothing: true,
-        draw: (ctx) => this._drawBars(ctx),
-      }),
-    );
-
-    for (const child of [this._thrust, this._blastoff, this._hull, this._damage, this._zap, name, this._bars]) {
-      this.addChild(child);
-    }
-
-    this.useRocket(atlas);
+  /** Damage smoke comes off the effects sheet, which the ship sheets do not carry. */
+  constructor(ship: Atlas, effects: Atlas, label: string) {
+    this._label = label;
+    this._smoke = effects.tinted('smoke_1', DAMAGE_TINT);
+    this.useRocket(ship);
   }
 
   /**
@@ -123,104 +90,128 @@ export class Rocket extends Actor {
    * file, so this is genuinely the only call site that changes.
    */
   useRocket(atlas: Atlas): void {
-    const shipAnchor = atlas.anchorOf('ship');
-
-    this._hull.graphics.anchor = shipAnchor;
-    this._hull.graphics.use(atlas.sprite('ship'));
-
-    this._thrust.graphics.anchor = shipAnchor;
-    this._thrustAnims = TIER_LEN.map((_, i) => atlas.animation(`thrust_t${i}`));
-    this._shownTier = -1;
-
-    this._zap.graphics.anchor = shipAnchor;
-    this._zapAnim = atlas.animation('zap');
-    this._zap.graphics.use(this._zapAnim);
-    this._zap.graphics.visible = false;
-
-    this._blastoff.graphics.anchor = atlas.anchorOf('blastoff_0');
-    this._blastoffAnim = atlas.animation('blastoff', { strategy: AnimationStrategy.Freeze });
-    this._blastoff.graphics.use(this._blastoffAnim);
-    this._blastoff.graphics.visible = false;
-  }
-
-  /** Damage smoke needs the effects sheet, which the ship sheets do not carry. */
-  useDamageSmoke(effects: Atlas): void {
-    const smoke = effects.sprite('smoke_1');
-    smoke.tint = DAMAGE_TINT;
-    smoke.scale.setTo(0.28, 0.28);
-    this._damage.graphics.anchor = effects.anchorOf('smoke_1');
-    this._damage.graphics.use(smoke);
-    this._damage.graphics.visible = false;
+    this._ship = atlas.sprite('ship');
+    this._thrust = TIER_LEN.map((_, i) => atlas.clip(`thrust_t${i}`));
+    this._zap = atlas.clip('zap');
+    this._blastoff = atlas.clip('blastoff');
   }
 
   /** Fire the ignition animation. Non-looping, ~1.14s, matched to LAUNCH_DURATION. */
   playBlastoff(): void {
-    this._blastoffAnim.reset();
-    this._blastoffAnim.play();
-    this._blastoff.graphics.visible = true;
+    this._blastoffAt = this._clock;
   }
 
-  sync(view: View, race: Race, dt: number): void {
-    this._race = race;
-    this.pos.setTo(view.cx, view.shipY);
-
-    const launching = race.launchT > 0;
-    this._blastoff.graphics.visible = launching;
-
-    // The plume is speed driven and dies the moment speed does, which is what makes
-    // a mistake visible rather than merely costly.
-    const lit = race.launched && race.speed > 0 && !launching;
-    this._thrust.graphics.visible = lit;
-    if (lit && race.tier !== this._shownTier) {
-      this._shownTier = race.tier;
-      this._thrust.graphics.use(this._thrustAnims[race.tier]);
-    }
-    if (!lit) this._shownTier = -1;
-
-    this._zap.graphics.visible = race.phase === 'stalled';
-
-    // Damage smoke, strongest just before a breach.
-    const dmg = 1 - race.hull / race.cfg.maxHull;
-    this._damage.graphics.visible = dmg > 0.2;
-    if (dmg > 0.2) {
-      this._damage.graphics.opacity = Math.min(0.5, dmg);
-      this._damage.pos.setTo(6, -4 + Math.sin(view.time * 5) * 3);
-    }
+  /**
+   * Place this rocket for the frame.
+   *
+   * `x` and `y` are passed in rather than read off the view, because every pilot
+   * sits in their own lane and at their own height. The view's `cx`/`shipY` are
+   * the local pilot's, and using them here drew the whole field on top of you.
+   */
+  sync(pilot: PilotView, dt: number, x: number, y: number): void {
+    this._pilot = pilot;
+    this._x = x;
+    this._y = y;
+    this._clock += dt;
 
     // The readouts slide down to stay clear of the exhaust as it grows, so a lit
     // thruster never covers them.
-    const flameTip = launching
-      ? SHIP_BASE_OFFSET + BLASTOFF_REACH
-      : lit
-        ? SHIP_BASE_OFFSET + TIER_LEN[race.tier]
-        : 0;
-    this._barDrop = approach(this._barDrop, Math.max(0, flameTip + 12 - 46), 8, dt);
-    this._bars.pos.setTo(0, 46 + this._barDrop);
+    const flameTip =
+      pilot.launchT > 0
+        ? SHIP_BASE_OFFSET + BLASTOFF_REACH
+        : this._lit(pilot)
+          ? SHIP_BASE_OFFSET + TIER_LEN[pilot.tier]
+          : 0;
+    this._barDrop = approach(this._barDrop, Math.max(0, flameTip + 12 - BARS_Y), 8, dt);
   }
 
-  private _drawBars(ctx: CanvasRenderingContext2D): void {
-    const race = this._race;
-    if (!race) return;
+  draw(ctx: CanvasRenderingContext2D, view: View): void {
+    const pilot = this._pilot;
+    if (!this.visible || !pilot) return;
+    const x = this._x;
+    const y = this._y;
+    // Other pilots are usually well off screen, and their name pill, plume and
+    // readouts are no use to anyone there.
+    if (y + REACH_DOWN < 0 || y - REACH_UP > view.h) return;
+    ctx.save();
 
-    const maxHull = race.cfg.maxHull;
+    if (pilot.launchT > 0) {
+      // Timed from the ignition event where there was one. A remote pilot whose
+      // launch event never arrived still gets the right frame, off their state.
+      const t =
+        this._blastoffAt === null ? LAUNCH_DURATION - pilot.launchT : this._clock - this._blastoffAt;
+      drawSprite(ctx, frameAt(this._blastoff, t), x, y);
+    } else if (this._lit(pilot)) {
+      drawSprite(ctx, frameAt(this._thrust[pilot.tier], this._clock), x, y);
+    }
+
+    drawSprite(ctx, this._ship, x, y);
+
+    // Damage smoke, strongest just before a breach.
+    const dmg = 1 - pilot.hull / pilot.maxHull;
+    if (dmg > 0.2) {
+      ctx.globalAlpha = Math.min(0.5, dmg);
+      drawSprite(ctx, this._smoke, x + 6, y - 4 + Math.sin(view.time * 5) * 3, DAMAGE_SCALE);
+      ctx.globalAlpha = 1;
+    }
+
+    if (pilot.phase === 'stalled') drawSprite(ctx, frameAt(this._zap, this._clock), x, y);
+
+    this._drawName(ctx, x, y + NAME_Y);
+    this._drawBars(ctx, pilot, x, y + BARS_Y + this._barDrop);
+    ctx.restore();
+  }
+
+  /**
+   * The plume is speed driven and dies the moment speed does, which is what makes
+   * a mistake visible rather than merely costly.
+   */
+  private _lit(pilot: PilotView): boolean {
+    return pilot.launched && pilot.speed > 0 && pilot.launchT <= 0;
+  }
+
+  private _drawName(ctx: CanvasRenderingContext2D, x: number, y: number): void {
+    ctx.font = NAME_FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (this._labelW < 0) this._labelW = ctx.measureText(this._label).width;
+
+    const pillW = this._labelW + 20;
+    const pillH = 20;
+    roundRect(ctx, x - pillW / 2, y - pillH / 2, pillW, pillH, 6);
+    ctx.fillStyle = 'rgba(10, 12, 24, 0.7)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(120, 140, 255, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#e8ecff';
+    ctx.fillText(this._label, x, y + 1);
+  }
+
+  /** Hull segments over a speed bar, centred on `x` with the hull row's top at `top`. */
+  private _drawBars(ctx: CanvasRenderingContext2D, pilot: PilotView, x: number, top: number): void {
+    const maxHull = pilot.maxHull;
     const hullW = maxHull * SEG_W + (maxHull - 1) * SEG_GAP;
-    const left = (BARS_W - hullW) / 2;
+    const left = x - hullW / 2;
+
+    // shadowBlur is measured in canvas px and ignores the transform, so it is
+    // scaled by hand to keep the glow the same size at every window size.
+    const px = ctx.getTransform().a;
 
     for (let i = 0; i < maxHull; i++) {
-      const x = left + i * (SEG_W + SEG_GAP);
-      if (i < race.hull) {
+      if (i < pilot.hull) {
         ctx.shadowColor = '#ff5d6c';
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 6 * px;
         ctx.fillStyle = '#ff5d6c';
       } else {
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#2a3050';
       }
-      ctx.fillRect(x, BARS_PAD, SEG_W, SEG_H);
+      ctx.fillRect(left + i * (SEG_W + SEG_GAP), top, SEG_W, SEG_H);
     }
     ctx.shadowBlur = 0;
 
-    const barY = BARS_PAD + SEG_H + 7;
+    const barY = top + SEG_H + 7;
     roundRect(ctx, left, barY, hullW, BAR_H, BAR_H / 2);
     ctx.fillStyle = 'rgba(18, 22, 42, 0.85)';
     ctx.fill();
@@ -228,7 +219,7 @@ export class Rocket extends Actor {
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    const ratio = race.speedRatio;
+    const ratio = pilot.speedRatio;
     if (ratio > 0.005) {
       // The gradient spans the whole track rather than the fill, so a given speed
       // always reads as the same colour instead of the hues stretching with it.
@@ -242,7 +233,7 @@ export class Rocket extends Actor {
       ctx.clip();
       if (ratio >= 0.995) {
         ctx.shadowColor = '#ffcf6b';
-        ctx.shadowBlur = 9;
+        ctx.shadowBlur = 9 * px;
       }
       ctx.fillStyle = g;
       ctx.fillRect(left, barY, hullW * ratio, BAR_H);

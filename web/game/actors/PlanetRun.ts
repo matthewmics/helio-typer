@@ -1,5 +1,4 @@
-import { Actor, type Animation, Color, type Scene, vec } from 'excalibur';
-import type { Atlas } from '../atlas';
+import { type Atlas, type Clip, drawSprite, drawSpriteTransformed, frameAt, type Sprite } from '../atlas';
 import {
   PLANET_BREATHE,
   PLANET_HALO_OPACITY,
@@ -7,22 +6,31 @@ import {
   PLANET_SPREAD,
   PLANET_SWAY,
   RUN,
-  Z,
   type Leg,
 } from '../config';
+import { hexRgb } from '../util';
 import type { View } from '../view';
 
 interface Body {
   leg: Leg;
-  actor: Actor;
+  sprite: Sprite;
   /** Atmosphere halo behind the disc, tinted to the body. */
-  halo: Actor;
+  halo: Sprite;
+  /** Draw scale that sizes the halo to this body's disc. */
+  haloScale: number;
   /** Only the moon has one: the mast and pennant on its upper-left limb. */
-  beacon?: Actor;
+  beacon?: Clip;
   /** Offset into every cycle, so no two bodies breathe or sway in step. */
   phase: number;
   swayRate: number;
   breatheRate: number;
+
+  /** This frame's placement, shared by the halo, disc and beacon passes. */
+  shown: boolean;
+  x: number;
+  y: number;
+  breathe: number;
+  rotation: number;
 }
 
 /** Glow radius of `effects/star` at scale 1, from its generator (a softDisc of 6.5). */
@@ -51,97 +59,80 @@ const DEG = Math.PI / 180;
  */
 export class PlanetRun {
   private readonly _bodies: Body[] = [];
-  private readonly _beaconAnim: Animation;
 
-  constructor(scene: Scene, planets: Atlas, effects: Atlas) {
-    this._beaconAnim = planets.animation('beacon');
-
+  constructor(planets: Atlas, effects: Atlas) {
     RUN.forEach((leg, i) => {
-      const sprite = planets.sprite(leg.body);
-      sprite.scale.setTo(leg.scale, leg.scale);
-
-      const actor = new Actor({ name: leg.body, pos: vec(0, 0), z: Z.planets });
-      actor.graphics.anchor = planets.anchorOf(leg.body);
-      actor.graphics.use(sprite);
-      scene.add(actor);
-
       // Sized off the atlas' own disc radius rather than the cell, since Saturn's
       // and Uranus' cells are mostly rings and a cell-sized halo would ring the
       // rings instead of the planet.
       const radius = (planets.json.radii?.[leg.body] ?? planets.frame(leg.body).w / 2) * leg.scale;
-      const glow = effects.sprite('star');
-      glow.tint = Color.fromHex(leg.glow);
-      const glowScale = (radius * PLANET_HALO_SPAN) / STAR_GLOW_R;
-      glow.scale.setTo(glowScale, glowScale);
 
-      const halo = new Actor({ name: `${leg.body}Halo`, pos: vec(0, 0), z: Z.planets - 1 });
-      halo.graphics.anchor = effects.anchorOf('star');
-      halo.graphics.use(glow);
-      scene.add(halo);
-
-      const body: Body = {
+      this._bodies.push({
         leg,
-        actor,
-        halo,
+        sprite: planets.sprite(leg.body),
+        halo: effects.tinted('star', hexRgb(leg.glow)),
+        haloScale: (radius * PLANET_HALO_SPAN) / STAR_GLOW_R,
+        // Flavour, not a finish line any more: humanity got this far. It sits on
+        // the moon's own cell, so it takes the moon's exact transform and the mast
+        // travels with the surface.
+        beacon: leg.body === 'moon' ? planets.clip('beacon') : undefined,
         phase: i * 2.399,
         swayRate: 0.17 + i * 0.021,
         breatheRate: 0.29 + i * 0.017,
-      };
-
-      if (leg.body === 'moon') {
-        // Flavour, not a finish line any more: humanity got this far. It sits on
-        // the moon's own cell, so the same position lines it up exactly, and it
-        // takes the moon's rotation so the mast travels with the surface.
-        this._beaconAnim.scale.setTo(leg.scale, leg.scale);
-        const beacon = new Actor({ name: 'moonBeacon', pos: vec(0, 0), z: Z.planets + 1 });
-        beacon.graphics.anchor = planets.anchorOf('beacon_0');
-        beacon.graphics.use(this._beaconAnim);
-        scene.add(beacon);
-        body.beacon = beacon;
-      }
-
-      this._bodies.push(body);
+        shown: false,
+        x: 0,
+        y: 0,
+        breathe: 1,
+        rotation: 0,
+      });
     });
   }
 
-  sync(view: View): void {
+  draw(ctx: CanvasRenderingContext2D, view: View): void {
+    const t = view.time;
+
     for (const b of this._bodies) {
       const { leg } = b;
       // Level with the ship at `leg.at`, above it before, below it after.
       const y = view.shipY + (view.progress - leg.at) * PLANET_SPREAD * leg.depth;
+      const half = (b.sprite.h * leg.scale) / 2 + 80;
+      b.shown = y > -half && y < view.h + half;
+      if (!b.shown) continue;
 
-      const half = (b.actor.graphics.current?.height ?? 0) / 2 + 80;
-      const onScreen = y > -half && y < view.h + half;
-
-      b.actor.graphics.visible = onScreen;
-      b.halo.graphics.visible = onScreen;
-      if (b.beacon) b.beacon.graphics.visible = onScreen;
-      if (!onScreen) continue;
-
-      const t = view.time;
       // Drift is scaled by depth, so a distant body sways less than a close one.
-      const x = leg.x * view.w + Math.sin(t * b.swayRate + b.phase) * PLANET_SWAY * leg.depth;
-      const breathe = 1 + Math.sin(t * b.breatheRate + b.phase) * PLANET_BREATHE;
-      const rotation = leg.rock
+      b.x = leg.x * view.w + Math.sin(t * b.swayRate + b.phase) * PLANET_SWAY * leg.depth;
+      b.y = y;
+      b.breathe = 1 + Math.sin(t * b.breatheRate + b.phase) * PLANET_BREATHE;
+      b.rotation = leg.rock
         ? Math.sin((t / ROCK_PERIOD) * Math.PI * 2 + b.phase) * leg.spin * DEG
         : t * leg.spin * DEG;
+    }
 
-      b.actor.pos.setTo(x, y);
-      b.actor.scale.setTo(breathe, breathe);
-      b.actor.rotation = rotation;
+    ctx.save();
 
+    // Every halo goes down before any disc. The halos are wide enough to reach a
+    // neighbouring body, and one drawn over a disc would wash it out.
+    for (const b of this._bodies) {
+      if (!b.shown) continue;
       // The halo breathes against the disc rather than with it, so the atmosphere
       // reads as glowing rather than as the whole sprite pumping.
-      const haloScale = 2 - breathe;
-      b.halo.pos.setTo(x, y);
-      b.halo.scale.setTo(haloScale, haloScale);
-      b.halo.graphics.opacity = PLANET_HALO_OPACITY * (0.82 + 0.18 * Math.sin(t * 0.63 + b.phase));
-
-      if (b.beacon) {
-        b.beacon.pos.setTo(x, y);
-        b.beacon.scale.setTo(breathe, breathe);
-        b.beacon.rotation = rotation;
-      }
+      ctx.globalAlpha = PLANET_HALO_OPACITY * (0.82 + 0.18 * Math.sin(t * 0.63 + b.phase));
+      drawSprite(ctx, b.halo, b.x, b.y, b.haloScale * (2 - b.breathe));
     }
+    ctx.globalAlpha = 1;
+
+    for (const b of this._bodies) {
+      if (!b.shown) continue;
+      const s = b.leg.scale * b.breathe;
+      drawSpriteTransformed(ctx, b.sprite, b.x, b.y, s, s, b.rotation);
+    }
+
+    for (const b of this._bodies) {
+      if (!b.shown || !b.beacon) continue;
+      const s = b.leg.scale * b.breathe;
+      drawSpriteTransformed(ctx, frameAt(b.beacon, t), b.x, b.y, s, s, b.rotation);
+    }
+
+    ctx.restore();
   }
 }

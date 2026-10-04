@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MatchmakingGateway } from './matchmaking.gateway';
 import { MatchmakingService } from './matchmaking.service';
-import { GuestService } from './guest.service';
+import { GuestModule } from './guest.module';
+import { RaceModule } from '../race/race.module';
 
-/** Needs no imports: `RedisModule` is global, the same way `PrismaModule` is. */
+/** `RedisModule` is global, the same way `PrismaModule` is, so it is not imported. */
 @Module({
-  providers: [MatchmakingGateway, MatchmakingService, GuestService],
+  imports: [GuestModule, RaceModule],
+  providers: [MatchmakingGateway, MatchmakingService],
   exports: [MatchmakingService],
 })
 export class MatchmakingModule {}

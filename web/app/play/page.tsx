@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { RaceGame } from "@/components/game/race-game";
+import { PlayScreen } from "@/components/game/play-screen";
 
 export const metadata: Metadata = {
   title: "HelioTyper: launch",
@@ -13,5 +13,5 @@ export const metadata: Metadata = {
  * own starfield would all be in the way.
  */
 export default function PlayPage() {
-  return <RaceGame />;
+  return <PlayScreen />;
 }

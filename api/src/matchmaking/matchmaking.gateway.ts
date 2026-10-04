@@ -12,6 +12,7 @@ import { Logger, OnModuleDestroy } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { GuestService, INSTANCE_ID, type Guest } from './guest.service';
 import { MatchmakingService, type MatchRecord } from './matchmaking.service';
+import { RaceService } from '../race/race.service';
 import { MM_EVENTS, type ReadyDecisionMsg } from './matchmaking.protocol';
 import { QUEUE_TICK_MS, SWEEP_TICK_MS } from './matchmaking.config';
 
@@ -54,6 +55,7 @@ export class MatchmakingGateway
   constructor(
     private readonly guests: GuestService,
     private readonly mm: MatchmakingService,
+    private readonly races: RaceService,
   ) {}
 
   afterInit(): void {
@@ -93,16 +95,24 @@ export class MatchmakingGateway
     this.local.delete(client.id);
     if (!guest) return;
 
-    await this.guests.detach(client.id);
-    await this.mm.dequeue(guest.guestId);
+    // Every disconnect touches Redis, and the noisiest time for disconnects is a
+    // shutdown, when the connection is on its way out and in-flight commands
+    // reject. Nest does not catch for a lifecycle hook, so an escaping rejection
+    // here takes the process down instead of ending it cleanly.
+    try {
+      await this.guests.detach(client.id);
+      await this.mm.dequeue(guest.guestId);
 
-    // A pilot who vanishes mid-ready-check is a decline. Waiting out their timer
-    // would hold five other people on a prompt for someone whose browser is
-    // already closed.
-    const matchId = await this.guests.currentMatch(guest.guestId);
-    if (matchId) {
-      const res = await this.mm.decide(matchId, guest.guestId, 'decline');
-      if (res.outcome === 'failed' && res.match) this.announceFailure(res.match);
+      // A pilot who vanishes mid-ready-check is a decline. Waiting out their
+      // timer would hold five other people on a prompt for someone whose browser
+      // is already closed.
+      const matchId = await this.guests.currentMatch(guest.guestId);
+      if (matchId) {
+        const res = await this.mm.decide(matchId, guest.guestId, 'decline');
+        if (res.outcome === 'failed' && res.match) this.announceFailure(res.match);
+      }
+    } catch (err) {
+      this.log.error(`disconnect cleanup failed: ${(err as Error).message}`);
     }
   }
 
@@ -248,6 +258,24 @@ export class MatchmakingGateway
   }
 
   private async announceConfirmed(match: MatchRecord): Promise<void> {
+    // Write the race record before anyone is told to go. The client joins the
+    // race the moment it lands on the game page, and a roster that is not there
+    // yet would be a join for an unknown match.
+    //
+    // Lanes are assigned here, once, in roster order. Deciding them per client
+    // would let two pilots draw themselves in the same column.
+    await this.races.open({
+      matchId: match.id,
+      seed: match.seed,
+      createdAt: Date.now(),
+      pilots: match.players.map((p, lane) => ({
+        id: p.id,
+        name: p.name,
+        bot: p.bot,
+        lane,
+      })),
+    });
+
     const socketIds = match.players.filter((p) => !p.bot && p.socketId).map((p) => p.socketId);
 
     // Park everyone in a room named for the match, so the race gateway can

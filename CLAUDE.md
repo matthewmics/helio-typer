@@ -42,7 +42,7 @@ covers what you are working on.
 | File | Covers |
 |---|---|
 | [game-mechanics.md](.claude/rules/game-mechanics.md) | The simulation: typing, speed and progress, mistakes, hull and stall, WPM, blastoff |
-| [game-presentation.md](.claude/rules/game-presentation.md) | The outbound run and its landmarks, camera and framing, atmosphere, sky, HUD |
+| [game-presentation.md](.claude/rules/game-presentation.md) | Rendering (plain Canvas 2D, no engine, no splash), the outbound run and its landmarks, camera and framing, atmosphere, sky, HUD |
 | [matchmaking.md](.claude/rules/matchmaking.md) | Guest identity, the queue and ready check, bot fill, and the rules for running clustered |
 | [local-development.md](.claude/rules/local-development.md) | Workspace conventions, hosts file entries, Docker and Traefik routing |
 | [prisma.md](.claude/rules/prisma.md) | Prisma v7 gotchas: driver adapter, generate-before-compile, the cjs pin, the rootDir trap |
@@ -62,8 +62,10 @@ note as precedent.
 ## Roadmap
 
 1. ~~Real sprite art now that mechanics are locked.~~ Done, see [assets/](assets/).
-2. ~~Port to ExcaliburJS: camera lock, particle system, the full outbound run to
-   the heliopause.~~ Done, and playable at `/play`, see [web/game/](web/game/).
+2. ~~Port the game into the app: camera lock, particle system, the full outbound
+   run to the heliopause.~~ Done, and playable at `/play`, see
+   [web/game/](web/game/). It landed on ExcaliburJS and moved to plain Canvas 2D
+   on 2026-10-03, see [game-presentation.md](.claude/rules/game-presentation.md).
 3. NestJS gateway with a server-authoritative loop, starting single-player against
    the server. The design is written up in
    [notes/experiments.md](.claude/notes/experiments.md); the spike that proved it

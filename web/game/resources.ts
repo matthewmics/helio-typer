@@ -1,9 +1,6 @@
-import { ImageSource, Loader } from 'excalibur';
 import { Atlas, type AtlasJson } from './atlas';
 
 // ---------------------------------------------------------------------------
-// The only file that differs meaningfully from the prototype.
-//
 // The prototype reached straight into the repo's assets/ folder using Vite's
 // `?url` imports. Next has no equivalent, and importing across the workspace
 // boundary out of web/ is worse than it looks, so here every asset is fetched
@@ -24,29 +21,20 @@ export interface RocketEntry {
   label: string;
 }
 
-const IMAGE_URLS = {
-  vanguard: `${BASE}/rockets/vanguard.png`,
-  kestrel: `${BASE}/rockets/kestrel.png`,
-  marauder: `${BASE}/rockets/marauder.png`,
-  planets: `${BASE}/planets/planets.png`,
-  finish: `${BASE}/finish/finish.png`,
-  effects: `${BASE}/effects/effects.png`,
-  environment: `${BASE}/environment/environment.png`,
+/** Each sheet's path under /game, minus the extension: its `.json` and `.png` sit side by side. */
+const SHEETS = {
+  vanguard: 'rockets/vanguard',
+  kestrel: 'rockets/kestrel',
+  marauder: 'rockets/marauder',
+  planets: 'planets/planets',
+  finish: 'finish/finish',
+  effects: 'effects/effects',
+  environment: 'environment/environment',
 } as const;
 
-const ATLAS_URLS = {
-  vanguard: `${BASE}/rockets/vanguard.json`,
-  kestrel: `${BASE}/rockets/kestrel.json`,
-  marauder: `${BASE}/rockets/marauder.json`,
-  planets: `${BASE}/planets/planets.json`,
-  finish: `${BASE}/finish/finish.json`,
-  effects: `${BASE}/effects/effects.json`,
-  environment: `${BASE}/environment/environment.json`,
-} as const;
+type SheetKey = keyof typeof SHEETS;
 
-type AtlasKey = keyof typeof IMAGE_URLS;
-
-/** The roster from assets/rockets/index.json. Empty until {@link loadAtlasData}. */
+/** The roster from assets/rockets/index.json. Empty until {@link loadArt} resolves. */
 export let ROCKETS: RocketEntry[] = [];
 
 export interface Atlases {
@@ -57,83 +45,80 @@ export interface Atlases {
   environment: Atlas;
 }
 
-const images = Object.fromEntries(
-  Object.entries(IMAGE_URLS).map(([key, url]) => [key, new ImageSource(url)]),
-) as Record<AtlasKey, ImageSource>;
-
-let atlasJson: Record<AtlasKey, AtlasJson> | null = null;
-let cached: Atlases | null = null;
+let loading: Promise<Atlases> | null = null;
 
 /**
- * Fetch the atlas JSON and the rocket roster.
+ * Every sheet and atlas, fetched, decoded and ready to draw.
  *
- * Must finish before the engine starts. The prototype got this for free by
- * importing the JSON at build time; over HTTP it has to be awaited, and
- * {@link atlases} is called synchronously from inside the scene where there is
- * nowhere left to await.
+ * This is the whole of loading, with no loader screen in front of it. The art is
+ * a few MB from the same origin and is usually in hand within a frame or two.
+ *
+ * Shared across mounts. React remounts the game on every save in development and
+ * StrictMode mounts it twice on purpose, and neither should fetch the art again.
+ * A failure is not kept, so the next mount retries rather than replaying it.
  */
-export async function loadAtlasData(): Promise<void> {
-  if (atlasJson) return;
+export function loadArt(): Promise<Atlases> {
+  loading ??= fetchArt().catch((err: unknown) => {
+    loading = null;
+    throw err;
+  });
+  return loading;
+}
 
-  const keys = Object.keys(ATLAS_URLS) as AtlasKey[];
+async function fetchArt(): Promise<Atlases> {
+  const keys = Object.keys(SHEETS) as SheetKey[];
   const [roster, ...sheets] = await Promise.all([
     fetchJson<{ rockets: RocketEntry[] }>(`${BASE}/rockets/index.json`),
-    ...keys.map((key) => fetchJson<AtlasJson>(ATLAS_URLS[key])),
+    ...keys.map((key) => loadSheet(SHEETS[key])),
   ]);
 
   ROCKETS = roster.rockets;
-  atlasJson = Object.fromEntries(keys.map((key, i) => [key, sheets[i]])) as Record<
-    AtlasKey,
-    AtlasJson
-  >;
+  const sheet = Object.fromEntries(keys.map((key, i) => [key, sheets[i]])) as Record<SheetKey, Atlas>;
+
+  return {
+    rockets: {
+      vanguard: sheet.vanguard,
+      kestrel: sheet.kestrel,
+      marauder: sheet.marauder,
+    },
+    planets: sheet.planets,
+    finish: sheet.finish,
+    effects: sheet.effects,
+    environment: sheet.environment,
+  };
+}
+
+async function loadSheet(path: string): Promise<Atlas> {
+  const [json, image] = await Promise.all([
+    fetchJson<AtlasJson>(`${BASE}/${path}.json`),
+    loadImage(`${BASE}/${path}.png`),
+  ]);
+  return new Atlas(json, image);
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(
-      `could not load ${url} (${res.status}). Run \`pnpm --filter web sync:assets\` to refresh web/public/game.`,
-    );
-  }
+  if (!res.ok) throw new Error(couldNotLoad(url, String(res.status)));
   return (await res.json()) as T;
 }
 
 /**
- * A fresh loader for the sprite sheets.
+ * Load an image and decode it.
  *
- * Not a module-level singleton the way the prototype's was: an Excalibur Loader
- * carries completion state, so reusing one across a remount (which React does in
- * development on every save) hands the new engine a loader that believes it has
- * already finished.
+ * `decode()` rather than waiting on `load`, so the decode cost lands here and not
+ * as a hitch on the first frame that draws the sheet.
  */
-export function createLoader(): Loader {
-  return new Loader(Object.values(images));
+async function loadImage(url: string): Promise<HTMLImageElement> {
+  const image = new Image();
+  image.src = url;
+  try {
+    await image.decode();
+  } catch {
+    throw new Error(couldNotLoad(url, 'missing or not an image'));
+  }
+  return image;
 }
 
-/**
- * Every loaded atlas, keyed the same way as the assets/ folders.
- *
- * Only valid once {@link loadAtlasData} has resolved and the loader has run:
- * {@link Atlas} slices its sheet at construction, which needs the image's real
- * dimensions.
- */
-export function atlases(): Atlases {
-  if (cached) return cached;
-  if (!atlasJson) throw new Error('atlases() called before loadAtlasData() resolved');
-
-  const json = atlasJson;
-  const build = (key: AtlasKey) => new Atlas(json[key], images[key]);
-
-  cached = {
-    rockets: {
-      vanguard: build('vanguard'),
-      kestrel: build('kestrel'),
-      marauder: build('marauder'),
-    },
-    planets: build('planets'),
-    finish: build('finish'),
-    effects: build('effects'),
-    environment: build('environment'),
-  };
-  return cached;
+function couldNotLoad(url: string, why: string): string {
+  return `could not load ${url} (${why}). Run \`pnpm --filter web sync:assets\` to refresh web/public/game.`;
 }

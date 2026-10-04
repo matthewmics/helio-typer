@@ -9,6 +9,15 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/** An RGB colour, each channel 0..255. */
+export type Rgb = readonly [number, number, number];
+
+/** `#rrggbb` as an {@link Rgb}. */
+export function hexRgb(hex: string): Rgb {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 export const rand = (lo: number, hi: number): number => lo + Math.random() * (hi - lo);
 
 export const randInt = (loInclusive: number, hiExclusive: number): number =>

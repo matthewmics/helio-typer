@@ -1,142 +1,145 @@
-import { type Engine, Scene } from 'excalibur';
+import { Race } from '@heliotyper/engine';
 import { CloudLayer } from '../actors/CloudLayer';
 import { Effects } from '../actors/Effects';
 import { Ground } from '../actors/Ground';
 import { Heliopause } from '../actors/Heliopause';
 import { PlanetRun } from '../actors/PlanetRun';
 import { Rocket } from '../actors/Rocket';
-import { Sky } from '../actors/Sky';
+import { drawSky } from '../actors/Sky';
 import { Starfield } from '../actors/Starfield';
-import { Race } from '@heliotyper/engine';
-import { atlases, type RocketId } from '../resources';
+import type { Atlas } from '../atlas';
+import { LANE_GAP } from '../config';
+import type { PilotEventKind, RaceNetClient, RacePilotInfo } from '../net';
+import { viewOfRace, type PilotView } from '../pilot';
+import type { Atlases, RocketId } from '../resources';
+import { Stage } from '../stage';
 import { Hud } from '../ui/hud';
 import { approach } from '../util';
-import { makeView, SHIP_BASE_OFFSET, type View } from '../view';
+import { fieldY, makeView, SHIP_BASE_OFFSET, type View } from '../view';
 
 /** Cap the step so a background tab does not teleport the ship on return. */
 const MAX_DT = 0.05;
 
-export class RaceScene extends Scene {
-  /**
-   * The seed every pilot in this race shares.
-   *
-   * It decides the sentence sequence, so two pilots given the same seed type the
-   * same words in the same order and their WPM is comparable. A solo run just
-   * gets a random one.
-   */
-  private readonly _seed: number;
+/** How often the local pilot's state goes up, in Hz. Matches the server broadcast. */
+const SEND_HZ = 12;
 
-  private _race!: Race;
-  private _hud!: Hud;
+export interface RaceSceneOptions {
+  /** Shared by every pilot in the match, so everyone types the same sentences. */
+  seed: number;
+  /** Callsign on your own name pill. */
+  youName: string;
+  /** Absent for a solo run, in which case the field is just you. */
+  net?: RaceNetClient;
+}
 
-  private _sky!: Sky;
-  private _stars!: Starfield;
-  private _ground!: Ground;
-  private _clouds!: CloudLayer;
-  private _planets!: PlanetRun;
-  private _heliopause!: Heliopause;
-  private _rocket!: Rocket;
-  private _effects!: Effects;
+/**
+ * The race: the simulation, every layer of the run, the field of rockets and the
+ * DOM HUD, ticked by a {@link Stage}.
+ *
+ * Constructing one starts it, and {@link dispose} is the only way to stop it. It
+ * owns a frame loop and a window key listener, so whoever builds one has to
+ * dispose of it: under React the component that does remounts on every save.
+ */
+export class RaceScene {
+  private readonly _art: Atlases;
+  private readonly _net: RaceNetClient | null;
+  private readonly _race: Race;
+  private readonly _hud: Hud;
+  private readonly _stage: Stage;
+
+  private readonly _stars: Starfield;
+  private readonly _ground: Ground;
+  private readonly _clouds: CloudLayer;
+  private readonly _planets: PlanetRun;
+  private readonly _heliopause: Heliopause;
+  private readonly _effects: Effects;
+
+  /** Your rocket. Always drawn from the local simulation, never from the network. */
+  private readonly _you: Rocket;
+  /** Everyone else, keyed by pilot id. */
+  private readonly _others = new Map<string, Rocket>();
+  /** Screen x offset per pilot id, fixed for the race. */
+  private readonly _laneX = new Map<string, number>();
 
   /** Eased toward real speed, so a stall reads as deceleration rather than a cut. */
   private _camSpeed = 0;
   private _worldScroll = 0;
   private _time = 0;
-  private _view!: View;
-  private _onKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  private _sinceSend = 0;
+  private _view: View;
+  private _disposed = false;
 
-  constructor(seed: number) {
-    super();
-    this._seed = seed;
-  }
+  constructor(canvas: HTMLCanvasElement, art: Atlases, options: RaceSceneOptions) {
+    this._art = art;
+    this._net = options.net ?? null;
+    this._stage = new Stage(canvas);
 
-  override onInitialize(engine: Engine): void {
-    const art = atlases();
-
-    this._race = new Race(this._seed, {
+    this._race = new Race(options.seed, {
       onLaunch: () => {
         this._hud.hideHint();
-        this._rocket.playBlastoff();
+        this._you.playBlastoff();
         this._effects.launch(this._view.cx, this._view.shipY + SHIP_BASE_OFFSET + 4);
-        this.camera.shake(7, 7, 550);
+        this._stage.shake(7, 550);
+        this._net?.sendEvent('launch');
       },
       onMistake: () => {
         this._hud.flash();
         this._effects.mistake(this._view.cx, this._view.shipY);
-        this.camera.shake(6, 6, 250);
+        this._stage.shake(6, 250);
+        this._net?.sendEvent('mistake');
       },
       onBreach: () => {
         this._effects.breach(this._view.cx, this._view.shipY);
-        this.camera.shake(10, 10, 600);
+        this._stage.shake(10, 600);
+        this._net?.sendEvent('breach');
       },
-      onFinish: () => this._hud.showEnd(),
+      onRecover: () => this._net?.sendEvent('recover'),
+      onFinish: () => {
+        this._hud.showEnd();
+        this._net?.sendEvent('finish');
+      },
       onPrompt: () => this._hud.renderPrompt(),
     });
 
-    this._sky = new Sky();
-    this.add(this._sky);
-
-    this._stars = new Starfield(this, art.effects);
-    this._ground = new Ground(this, art.environment);
-    this._clouds = new CloudLayer(this, art.environment);
-    this._planets = new PlanetRun(this, art.planets, art.effects);
-    this._heliopause = new Heliopause(this, art.finish);
-    this._effects = new Effects(this, art.effects);
-
-    this._rocket = new Rocket(art.rockets.vanguard);
-    this._rocket.useDamageSmoke(art.effects);
-    this.add(this._rocket);
+    this._stars = new Starfield(art.effects);
+    this._ground = new Ground(art.environment);
+    this._clouds = new CloudLayer(art.environment);
+    this._planets = new PlanetRun(art.planets, art.effects);
+    this._heliopause = new Heliopause(art.finish);
+    this._effects = new Effects(art.effects);
+    this._you = this._buildField(options.youName, art.rockets.vanguard, art.effects);
 
     this._hud = new Hud(this._race, {
       onRestart: () => this.restart(),
       onRocketChange: (id) => this.useRocket(id),
     });
+    this._hud.addPilots([...this._others.keys()]);
 
-    // The camera is locked for the whole race, so world space is screen space.
-    // Nothing here follows the ship: the ship travelling across a fixed frame is
-    // the entire read.
-    this._lockCamera(engine);
-    engine.screen.events.on('resize', () => this._lockCamera(engine));
+    this._view = makeView(this._stage.width, this._stage.height, this._race, 0, 0);
 
-    this._view = makeView(engine, this._race, 0, 0);
-    this._stars.layout(this._view.w, this._view.h);
-
-    this._bindTyping();
-  }
-
-  private _lockCamera(engine: Engine): void {
-    this.camera.pos.setTo(engine.screen.drawWidth / 2, engine.screen.drawHeight / 2);
-    this.camera.zoom = 1;
-  }
-
-  private _bindTyping(): void {
-    this._onKeyDown = (e: KeyboardEvent) => {
-      // Let browser and OS shortcuts through.
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      // Single printable characters only. Backspace stays unhandled by design.
-      if (e.key.length !== 1) return;
-      e.preventDefault();
-      this._race.typeKey(e.key);
-    };
+    // Nothing runs until everything above that could throw has been built.
     window.addEventListener('keydown', this._onKeyDown, { passive: false });
+    this._net?.onEvent((id, kind) => this._onRemoteEvent(id, kind));
+    this._stage.start((dt) => this._frame(dt));
   }
 
   /**
-   * Drop the window listener.
+   * Stop the loop and let go of the page.
    *
-   * The prototype never needed this: the page owned exactly one engine for its
-   * whole life. Under React the component remounts on every save, and in
-   * development StrictMode mounts twice on purpose, so a listener left attached
-   * means a discarded scene still receives every keystroke and types into a race
-   * nobody can see.
+   * The key listener comes off first, so a discarded race never types another
+   * key. Under React this runs on every remount, and StrictMode mounts twice on
+   * purpose, so anything left attached here would type into a race nobody can see.
    */
-  detach(): void {
-    if (this._onKeyDown) window.removeEventListener('keydown', this._onKeyDown);
-    this._onKeyDown = null;
+  dispose(): void {
+    if (this._disposed) return;
+    this._disposed = true;
+    window.removeEventListener('keydown', this._onKeyDown);
+    this._stage.dispose();
+    this._hud.dispose();
   }
 
   useRocket(id: RocketId): void {
-    this._rocket.useRocket(atlases().rockets[id]);
+    this._you.useRocket(this._art.rockets[id]);
   }
 
   restart(): void {
@@ -147,8 +150,67 @@ export class RaceScene extends Scene {
     this._hud.hideEnd();
   }
 
-  override onPreUpdate(engine: Engine, elapsedMs: number): void {
-    const dt = Math.min(elapsedMs / 1000, MAX_DT);
+  /**
+   * Build one rocket per pilot and give each a fixed lane. Returns yours.
+   *
+   * You are always drawn in the middle column, whatever lane the server handed
+   * out, so the frame reads the same from every seat. Everyone else keeps their
+   * server-assigned order around you, which is what stops two pilots landing in
+   * the same column.
+   */
+  private _buildField(youName: string, ship: Atlas, effects: Atlas): Rocket {
+    const roster: RacePilotInfo[] = this._net?.pilots ?? [
+      { id: 'you', name: youName, lane: 0, isYou: true },
+    ];
+
+    const others = roster.filter((p) => !p.isYou).sort((a, b) => a.lane - b.lane);
+    const you = roster.find((p) => p.isYou) ?? roster[0];
+
+    // Slot yourself into the middle of the ordered field.
+    const columns = [...others];
+    const middle = Math.floor(roster.length / 2);
+    columns.splice(middle, 0, you);
+
+    columns.forEach((pilot, index) => {
+      this._laneX.set(pilot.id, (index - middle) * LANE_GAP);
+    });
+
+    for (const pilot of others) {
+      this._others.set(pilot.id, new Rocket(ship, effects, pilot.name));
+    }
+    return new Rocket(ship, effects, you.name);
+  }
+
+  private readonly _onKeyDown = (e: KeyboardEvent): void => {
+    // Let browser and OS shortcuts through.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Single printable characters only. Backspace stays unhandled by design.
+    if (e.key.length !== 1) return;
+    e.preventDefault();
+    // Applied locally with no round trip. At 100+ WPM a key lands every ~120ms,
+    // well inside typical latency, so waiting on the server would feel sluggish
+    // to exactly the players who notice most.
+    this._race.typeKey(e.key);
+  };
+
+  private _onRemoteEvent(pilotId: string, kind: PilotEventKind): void {
+    // The connection outlives this scene and keeps no way to unsubscribe.
+    if (this._disposed) return;
+    const rocket = this._others.get(pilotId);
+    if (!rocket) return;
+    // Only the ignition has a one-shot animation of its own. The rest are already
+    // visible through the interpolated state: a mistake shows as the plume dying,
+    // a breach as the zap sprite, because both are driven by the same fields.
+    if (kind === 'launch') rocket.playBlastoff();
+  }
+
+  private _frame(elapsed: number): void {
+    const dt = Math.min(elapsed, MAX_DT);
+    this._update(dt);
+    this._draw(this._stage.ctx);
+  }
+
+  private _update(dt: number): void {
     this._time += dt;
 
     this._race.update(dt);
@@ -157,17 +219,82 @@ export class RaceScene extends Scene {
     this._camSpeed = approach(this._camSpeed, this._race.speed, 8, dt);
     this._worldScroll += this._camSpeed * dt * 900;
 
-    const view = makeView(engine, this._race, this._worldScroll, this._time);
+    const view = makeView(this._stage.width, this._stage.height, this._race, this._worldScroll, this._time);
     this._view = view;
 
-    this._sky.sync(view);
-    this._stars.sync(view);
-    this._ground.sync(view);
-    this._clouds.sync(view);
-    this._planets.sync(view);
-    this._heliopause.sync(view);
-    this._rocket.sync(view, this._race, dt);
+    const mine = viewOfRace(this._race);
+    this._you.sync(mine, dt, view.cx + (this._laneX.get(this._youId()) ?? 0), view.shipY);
+    this._syncOthers(view, dt);
+
     this._effects.update(dt);
     this._hud.update(dt);
+
+    this._pump(dt, mine);
+  }
+
+  /**
+   * Back to front. The camera never moves, so the order of these calls is the
+   * whole depth story.
+   *
+   * Every rocket goes down between the two halves of the cloud band, which is what
+   * sells flying through the weather rather than past a picture of it. Other
+   * pilots go before yours, so a crowded lane never hides your own ship at the
+   * moment you most need to see it.
+   */
+  private _draw(ctx: CanvasRenderingContext2D): void {
+    const view = this._view;
+    drawSky(ctx, view);
+    this._stars.draw(ctx, view);
+    this._planets.draw(ctx, view);
+    this._heliopause.draw(ctx, view);
+    this._ground.draw(ctx, view);
+    this._clouds.drawBehind(ctx, view);
+    for (const rocket of this._others.values()) rocket.draw(ctx, view);
+    this._you.draw(ctx, view);
+    this._clouds.drawInFront(ctx, view);
+    this._effects.draw(ctx);
+  }
+
+  private _youId(): string {
+    return this._net?.youId ?? 'you';
+  }
+
+  private _syncOthers(view: View, dt: number): void {
+    const net = this._net;
+    if (!net) return;
+
+    for (const [id, rocket] of this._others) {
+      const state: PilotView | null = net.field.view(id, this._race.cfg.maxHull);
+      // Nothing has arrived for this pilot yet. Better an empty lane than a
+      // rocket parked on the pad that jumps once the first snapshot lands.
+      rocket.visible = state !== null;
+      this._hud.placePilot(id, state ? state.progress : null);
+      if (state) rocket.sync(state, dt, view.cx + (this._laneX.get(id) ?? 0), fieldY(view, state.progress));
+    }
+  }
+
+  /** Push the local pilot's state up on a fixed cadence, independent of frame rate. */
+  private _pump(dt: number, mine: PilotView): void {
+    const net = this._net;
+    if (!net) return;
+
+    this._sinceSend += dt;
+    const interval = 1 / SEND_HZ;
+    if (this._sinceSend < interval) return;
+    this._sinceSend = Math.min(this._sinceSend - interval, interval);
+
+    net.sendState({
+      t: Date.now(),
+      progress: mine.progress,
+      speed: mine.speed,
+      speedRatio: mine.speedRatio,
+      tier: mine.tier,
+      hull: mine.hull,
+      phase: mine.phase,
+      launched: mine.launched,
+      launchT: mine.launchT,
+      wpm: this._race.wpm,
+      stallTimer: this._race.stallTimer,
+    });
   }
 }

@@ -1,26 +1,20 @@
-import { Actor, Color, type Scene, vec } from 'excalibur';
-import type { Atlas } from '../atlas';
-import {
-  CLOUD_BILLOW,
-  CLOUD_COUNT,
-  CLOUD_ROLL,
-  CLOUD_SPREAD,
-  CLOUD_WIND,
-  Z,
-} from '../config';
-import { rand, randInt, smoothstep } from '../util';
+import { type Atlas, drawSpriteTransformed, type Sprite } from '../atlas';
+import { CLOUD_BILLOW, CLOUD_COUNT, CLOUD_ROLL, CLOUD_SPREAD, CLOUD_WIND } from '../config';
+import { rand, randInt, type Rgb, smoothstep } from '../util';
 import type { View } from '../view';
 
 const DEG = Math.PI / 180;
 
 /** Near silhouettes: less air between you and them, so they read almost black. */
-const FG_TINT = Color.fromRGB(26, 28, 48);
+const FG_TINT: Rgb = [26, 28, 48];
 /** Far haze. */
-const BG_TINT = Color.fromRGB(66, 70, 104);
+const BG_TINT: Rgb = [66, 70, 104];
 
 interface Cloud {
-  body: Actor;
-  rim: Actor;
+  body: Sprite;
+  rim: Sprite;
+  /** Draw scale of the texture, before the billow. */
+  scale: number;
   /** Altitude in `atmo` space, i.e. where in the atmosphere window it sits. */
   alt: number;
   /** Horizontal position as a fraction of viewport width. */
@@ -37,13 +31,21 @@ interface Cloud {
   billowX: number;
   billowY: number;
   rollRate: number;
+
+  /** This frame's placement, worked out by the body pass and reused by the rim pass. */
+  shown: boolean;
+  px: number;
+  py: number;
+  sx: number;
+  sy: number;
+  roll: number;
 }
 
 /**
  * Real cloud objects at fixed altitudes that physically stream past the ship.
  *
  * A quarter of them are foreground and draw in front of the rocket, which is what
- * actually sells the depth. The `_rim` overlay is the warm sunset edge on top,
+ * actually sells the depth. The rim overlay is the warm sunset edge on top,
  * authored at full strength and faded down as you climb above the light.
  *
  * The cloud textures are white with form shading baked in, so both moods come out
@@ -57,38 +59,18 @@ interface Cloud {
 export class CloudLayer {
   private readonly _clouds: Cloud[] = [];
 
-  constructor(scene: Scene, env: Atlas) {
+  constructor(env: Atlas) {
     for (let i = 0; i < CLOUD_COUNT; i++) {
       const shape = randInt(0, 4);
       const fg = Math.random() < 0.25;
       const scale = rand(0.55, 1.1) * (fg ? 1.7 : 1);
 
-      const bodySprite = env.sprite(`cloud_${shape}`);
-      bodySprite.tint = fg ? FG_TINT : BG_TINT;
-      bodySprite.scale.setTo(scale, scale);
-
-      const rimSprite = env.sprite(`cloud_${shape}_rim`);
-      rimSprite.scale.setTo(scale, scale);
-
-      const z = fg ? Z.cloudsFront : Z.cloudsBack;
-
-      const body = new Actor({ name: `cloud${i}`, pos: vec(0, 0), z });
-      body.graphics.anchor = env.anchorOf(`cloud_${shape}`);
-      body.graphics.use(bodySprite);
-      body.graphics.opacity = fg ? 0.94 : 0.82;
-
-      // The rim shares the cloud's cell, so drawing it at the same position lines
-      // it up exactly. Separate actor because its alpha fades independently.
-      const rim = new Actor({ name: `cloudRim${i}`, pos: vec(0, 0), z: z + 1 });
-      rim.graphics.anchor = env.anchorOf(`cloud_${shape}_rim`);
-      rim.graphics.use(rimSprite);
-
-      scene.add(body);
-      scene.add(rim);
-
       this._clouds.push({
-        body,
-        rim,
+        body: env.tinted(`cloud_${shape}`, fg ? FG_TINT : BG_TINT),
+        // The rim shares the cloud's cell, so drawing it with the same transform
+        // lines it up exactly.
+        rim: env.sprite(`cloud_${shape}_rim`),
+        scale,
         alt: rand(0.05, 0.5),
         x: Math.random(),
         depth: rand(0.5, 1.2),
@@ -99,53 +81,71 @@ export class CloudLayer {
         billowX: rand(0.1, 0.22),
         billowY: rand(0.13, 0.27),
         rollRate: rand(0.07, 0.16),
+        shown: false,
+        px: 0,
+        py: 0,
+        sx: 1,
+        sy: 1,
+        roll: 0,
       });
     }
   }
 
-  sync(view: View): void {
+  /** The clouds the rockets fly in front of. */
+  drawBehind(ctx: CanvasRenderingContext2D, view: View): void {
+    this._draw(ctx, view, false);
+  }
+
+  /** The near silhouettes that pass in front of the rockets. */
+  drawInFront(ctx: CanvasRenderingContext2D, view: View): void {
+    this._draw(ctx, view, true);
+  }
+
+  /** Every body in the band first, then every rim over them. */
+  private _draw(ctx: CanvasRenderingContext2D, view: View, front: boolean): void {
     // Once you are above the weather the whole band is gone for good.
     const fade = 1 - smoothstep(0.5, 0.64, view.atmo);
+    if (fade <= 0.01) return;
     const rimStrength = (1 - smoothstep(0.04, 0.3, view.atmo)) * 0.55;
 
+    ctx.save();
     for (const c of this._clouds) {
-      if (fade <= 0.01) {
-        c.body.graphics.visible = false;
-        c.rim.graphics.visible = false;
-        continue;
-      }
-
-      const y = view.shipY + (view.atmo - c.alt) * CLOUD_SPREAD * c.depth;
-      const onScreen = y > -300 && y < view.h + 300;
-      c.body.graphics.visible = onScreen;
-      c.rim.graphics.visible = onScreen && rimStrength > 0.01;
-      if (!onScreen) continue;
-
-      // Wind, wrapped through a band one cloud-width wider than the screen at
-      // each end, so a cloud slides off one side and returns from the other
-      // rather than popping out of existence at the edge.
-      const t = view.time;
-      const band = view.w + c.half * 2;
-      let x = (c.x * view.w + t * c.wind * c.depth + c.half) % band;
-      if (x < 0) x += band;
-      x -= c.half;
-
-      const roll = Math.sin(t * c.rollRate + c.phase) * CLOUD_ROLL * DEG;
-      const sx = 1 + Math.sin(t * c.billowX + c.phase) * CLOUD_BILLOW;
-      const sy = 1 - Math.sin(t * c.billowY + c.phase * 1.7) * CLOUD_BILLOW * 0.7;
-
-      c.body.pos.setTo(x, y);
-      c.body.scale.setTo(sx, sy);
-      c.body.rotation = roll;
-      // The rim shares the body's cell, so it has to take the exact same
-      // transform or the sunset edge slides off the shape it belongs to.
-      c.rim.pos.setTo(x, y);
-      c.rim.scale.setTo(sx, sy);
-      c.rim.rotation = roll;
-
-      const alpha = fade * (c.fg ? 0.95 : 1);
-      c.body.graphics.opacity = (c.fg ? 0.94 : 0.82) * alpha;
-      c.rim.graphics.opacity = alpha * rimStrength;
+      c.shown = c.fg === front && this._place(c, view);
+      if (!c.shown) continue;
+      ctx.globalAlpha = (c.fg ? 0.94 : 0.82) * fade * (c.fg ? 0.95 : 1);
+      drawSpriteTransformed(ctx, c.body, c.px, c.py, c.sx, c.sy, c.roll);
     }
+
+    if (rimStrength > 0.01) {
+      for (const c of this._clouds) {
+        if (!c.shown) continue;
+        // The rim takes the body's exact transform, or the sunset edge slides off
+        // the shape it belongs to.
+        ctx.globalAlpha = fade * (c.fg ? 0.95 : 1) * rimStrength;
+        drawSpriteTransformed(ctx, c.rim, c.px, c.py, c.sx, c.sy, c.roll);
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Work out where this cloud sits this frame. False if it is off screen. */
+  private _place(c: Cloud, view: View): boolean {
+    const y = view.shipY + (view.atmo - c.alt) * CLOUD_SPREAD * c.depth;
+    if (y <= -300 || y >= view.h + 300) return false;
+
+    // Wind, wrapped through a band one cloud-width wider than the screen at each
+    // end, so a cloud slides off one side and returns from the other rather than
+    // popping out of existence at the edge.
+    const t = view.time;
+    const band = view.w + c.half * 2;
+    let x = (c.x * view.w + t * c.wind * c.depth + c.half) % band;
+    if (x < 0) x += band;
+
+    c.px = x - c.half;
+    c.py = y;
+    c.sx = c.scale * (1 + Math.sin(t * c.billowX + c.phase) * CLOUD_BILLOW);
+    c.sy = c.scale * (1 - Math.sin(t * c.billowY + c.phase * 1.7) * CLOUD_BILLOW * 0.7);
+    c.roll = Math.sin(t * c.rollRate + c.phase) * CLOUD_ROLL * DEG;
+    return true;
   }
 }

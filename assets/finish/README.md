@@ -59,10 +59,9 @@ them integers.
 
 `heliopause_0..5`, 6fps, **loops**. Slow shimmer, ~1s cycle.
 
-**Composite it additively** (`globalCompositeOperation = 'lighter'`, or an
-additive blend material in Excalibur). It's a glow sheet: every pixel is either
-transparent or brighter than the sky, so additive is both correct and stops the
-starfield behind it from being dimmed.
+**Composite it additively** (`globalCompositeOperation = 'lighter'`). It's a
+glow sheet: every pixel is either transparent or brighter than the sky, so
+additive is both correct and stops the starfield behind it from being dimmed.
 
 ### Layout
 
