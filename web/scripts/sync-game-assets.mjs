@@ -22,7 +22,7 @@ const webRoot = resolve(here, '..');
 const source = resolve(webRoot, '..', 'assets');
 const target = join(webRoot, 'public', 'game');
 
-const GROUPS = ['rockets', 'planets', 'finish', 'effects', 'environment'];
+const GROUPS = ['rockets', 'planets', 'kuiper', 'finish', 'effects', 'environment'];
 
 async function exists(path) {
   try {

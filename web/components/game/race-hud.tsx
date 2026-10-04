@@ -39,12 +39,15 @@ export const RaceHud = memo(function RaceHud() {
       </div>
 
       <div id="promptBox">
-        <div id="promptText" />
+        {/* A window three lines tall over the whole passage, scrolled a line at a time. */}
+        <div id="promptView">
+          <div id="promptText" />
+        </div>
         {/*
           Static markup, so the arc animations keep running instead of restarting
           every time the countdown ticks. The arcs crawl the border rather than
           crossing the panel: bolts drawn through the middle read as a lattice
-          over the words, and the whole point of this state is that the sentence
+          over the words, and the whole point of this state is that the text
           stays readable.
         */}
         <div id="stallFx" aria-hidden="true">
@@ -61,18 +64,16 @@ export const RaceHud = memo(function RaceHud() {
           <i className="spark" />
           HULL BREACH <b id="stallTimer">1.0s</b>
         </div>
+        {/* Inside the box so it can sit just under it, whatever height the box is. */}
+        <div id="hint">
+          Build speed and stay consistent. Stop typing and you fall back to a crawl.
+        </div>
       </div>
 
-      <div id="hint">
-        Build speed and stay consistent. Stop typing and you fall back to a crawl.
-      </div>
-
-      <div id="endScreen">
-        <h1 id="endTitle">You crossed the heliopause</h1>
-        <div className="row" id="endStats" />
-        <button id="btnPlayAgain" type="button">
-          Play again
-        </button>
+      {/* Before the start: who the race is still waiting for, then 3, 2, 1, GO. */}
+      <div id="startOverlay" data-state="off" aria-live="polite">
+        <b id="startCount" />
+        <span id="startNote" />
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { RUN } from '../config';
+import { KUIPER, RUN } from '../config';
 import type { Race } from '@heliotyper/engine';
 import { ROCKETS, type RocketId } from '../resources';
 
@@ -7,6 +7,13 @@ function el<T extends HTMLElement>(id: string): T {
   if (!node) throw new Error(`missing #${id} in the HUD markup`);
   return node as T;
 }
+
+/**
+ * Characters always laid out past the cursor. A few lines' worth at the
+ * prompt's widest, so the two lines showing under the one being typed are
+ * always full.
+ */
+const READ_AHEAD = 300;
 
 /** For HUD parts that are allowed to be absent, notably the dev panel. */
 function maybe<T extends HTMLElement>(id: string): T | null {
@@ -17,6 +24,13 @@ export interface HudCallbacks {
   onRestart: () => void;
   onRocketChange: (id: RocketId) => void;
 }
+
+/** What the start overlay says: who the race still waits for, then the count. */
+export type StartState =
+  | { kind: 'waiting'; joined: number; humans: number }
+  | { kind: 'count'; seconds: number }
+  | { kind: 'go' }
+  | { kind: 'off' };
 
 /**
  * The DOM half of the game.
@@ -29,16 +43,24 @@ export interface HudCallbacks {
 export class Hud {
   private readonly _prompt = el('promptBox');
   private readonly _promptText = el('promptText');
+  /** One span per character of the looped passage, laid out a lap at a time. */
+  private _chars: HTMLElement[] = [];
+  /** The index the passage was last coloured up to, or -1 for not yet. */
+  private _painted = -1;
+  /** How far the passage is scrolled: the top of the line being typed. */
+  private _lineTop = 0;
   private readonly _stallTimer = el('stallTimer');
   private readonly _statWpm = el('statWpm');
   private readonly _statAcc = el('statAcc');
   private readonly _statDist = el('statDist');
   private readonly _railMarker = el('railMarker');
   private readonly _rail = el('rail');
-  private readonly _endScreen = el('endScreen');
-  private readonly _endTitle = el('endTitle');
-  private readonly _endStats = el('endStats');
   private readonly _hint = el('hint');
+  private readonly _start = el('startOverlay');
+  private readonly _startCount = el('startCount');
+  private readonly _startNote = el('startNote');
+  /** What the start overlay last showed, so a frame that changes nothing writes nothing. */
+  private _startKey = '';
 
   private readonly _ticks: { at: number; node: HTMLElement }[] = [];
   /** One rail dot per other pilot, keyed by pilot id. */
@@ -71,6 +93,22 @@ export class Hud {
       this._ticks.push({ at: leg.at, node });
       this._added.push(node);
     }
+
+    // The Kuiper belt is a stretch of the run rather than a point on it, so it
+    // gets a band beside the rail instead of a tick. It goes in first so the
+    // ticks and every marker draw over it.
+    const span = KUIPER.to - KUIPER.from;
+    const belt = document.createElement('div');
+    belt.className = 'belt';
+    belt.style.bottom = `${KUIPER.from * 100}%`;
+    belt.style.height = `${span * 100}%`;
+    const label = document.createElement('span');
+    label.textContent = 'kuiper belt';
+    label.style.bottom = `${((KUIPER.labelAt - KUIPER.from) / span) * 100}%`;
+    belt.appendChild(label);
+    this._rail.prepend(belt);
+    this._ticks.push({ at: KUIPER.from, node: belt });
+    this._added.push(belt);
   }
 
   /**
@@ -110,7 +148,6 @@ export class Hud {
    */
   private _bindDevPanel(callbacks: HudCallbacks): void {
     const { signal } = this._listeners;
-    el('btnPlayAgain').addEventListener('click', callbacks.onRestart, { signal });
 
     const select = maybe<HTMLSelectElement>('selRocket');
     if (!select) return;
@@ -163,15 +200,13 @@ export class Hud {
   dispose(): void {
     this._listeners.abort();
     for (const node of this._added) node.remove();
-    this.hideEnd();
+    this.reset();
+    this.showStart({ kind: 'off' });
   }
 
   // -------------------------------------------------------------------------
 
-  /**
-   * Retire the pre-launch instruction once the player has clearly read it.
-   * It also sits where a two-line sentence wants to go, so it has to leave.
-   */
+  /** Retire the pre-launch instruction once the player has clearly read it. */
   hideHint(): void {
     this._hint.style.display = 'none';
   }
@@ -190,7 +225,7 @@ export class Hud {
     const race = this._race;
 
     if (race.phase === 'stalled') {
-      // The sentence stays exactly where it was, greyed out. Nothing is rebuilt:
+      // The passage stays exactly where it was, greyed out. Nothing is rebuilt:
       // the stall calls this every frame to run the countdown, and re-rendering
       // the spans each time would restart the arc animations mid-flicker.
       this._prompt.classList.add('stalled');
@@ -200,16 +235,68 @@ export class Hud {
 
     this._prompt.classList.remove('stalled');
 
-    const sentence = race.sentence;
+    this._layOut(race.typedIndex);
+    this._paint(race.typedIndex);
+    this._follow();
+  }
+
+  /**
+   * Lay the passage out a lap at a time, one span per character, keeping at
+   * least {@link READ_AHEAD} characters past the cursor. A run that outlasts
+   * the passage carries straight on into the next lap below it, so the lines
+   * under the one being typed are never empty and the text never jumps back
+   * to the top. Keystrokes in between only recolour what they changed, rather
+   * than rebuilding hundreds of spans twenty times a second.
+   */
+  private _layOut(index: number): void {
+    if (this._chars.length > index + READ_AHEAD) return;
+
+    const lap = this._race.lap;
     let html = '';
-    for (let i = 0; i < sentence.length; i++) {
-      const cls = i < race.typedIndex ? 'correct' : i === race.typedIndex ? 'current' : 'pending';
-      // A real space, not &nbsp;: a non-breaking space gives the browser no
-      // valid break point anywhere in the sentence, so overflow-wrap:break-word
-      // has no choice but to break mid-word once a line fills up.
-      html += `<span class="ch ${cls}">${escapeHtml(sentence[i])}</span>`;
+    let count = this._chars.length;
+    while (count <= index + READ_AHEAD) {
+      for (const ch of lap) {
+        // A real space, not &nbsp;: a non-breaking space gives the browser no
+        // valid break point anywhere in the passage, so overflow-wrap:break-word
+        // has no choice but to break mid-word once a line fills up.
+        html += `<span class="ch pending">${escapeHtml(ch)}</span>`;
+      }
+      count += lap.length;
     }
-    this._promptText.innerHTML = html;
+
+    // A fresh HUD replaces whatever an earlier one on this markup left behind.
+    if (this._chars.length === 0) this._promptText.innerHTML = html;
+    else this._promptText.insertAdjacentHTML('beforeend', html);
+    this._chars = [...this._promptText.children] as HTMLElement[];
+  }
+
+  /** Colour the text up to `index`, touching only what changed since the last call. */
+  private _paint(index: number): void {
+    const chars = this._chars;
+    if (this._painted < 0 || index < this._painted) {
+      // The first paint, or a restart: everything changes.
+      chars.forEach((span, i) => {
+        span.className = `ch ${i < index ? 'correct' : i === index ? 'current' : 'pending'}`;
+      });
+    } else {
+      for (let i = this._painted; i < index; i++) chars[i].className = 'ch correct';
+      if (chars[index]) chars[index].className = 'ch current';
+    }
+    this._painted = index;
+  }
+
+  /**
+   * Keep the line being typed at the top of the window, with the next two
+   * showing under it. Moves only when the cursor lands on a new line, and then
+   * by exactly one line, which the stylesheet eases.
+   */
+  private _follow(): void {
+    const current = this._chars[this._painted];
+    if (!current) return;
+    const top = current.offsetTop;
+    if (top === this._lineTop) return;
+    this._lineTop = top;
+    this._promptText.style.transform = `translateY(${-top}px)`;
   }
 
   update(dt: number): void {
@@ -229,21 +316,62 @@ export class Hud {
     }
   }
 
-  showEnd(): void {
-    const race = this._race;
-    this._endTitle.textContent = 'You crossed the heliopause';
-    this._endStats.innerHTML =
-      `Hull remaining: ${race.hull}/${race.cfg.maxHull} &nbsp;•&nbsp; ` +
-      `WPM: ${race.wpm} &nbsp;•&nbsp; Accuracy: ${race.accuracy}% &nbsp;•&nbsp; ` +
-      `Time: ${race.elapsed.toFixed(1)}s`;
-    this._endScreen.classList.add('show');
-  }
-
-  hideEnd(): void {
-    this._endScreen.classList.remove('show');
+  /** Back to how a fresh run looks. The results themselves are React's, not the HUD's. */
+  reset(): void {
     this._prompt.classList.remove('flash', 'stalled');
     this._flashT = 0;
+    // A restart goes back to the top of the passage.
+    this._painted = -1;
+    this._lineTop = 0;
+    this._promptText.style.transform = '';
     this._showHint();
+  }
+
+  /**
+   * The start overlay: how many pilots the race is still waiting for, then
+   * 3, 2, 1, GO. Called every frame, so it only touches the DOM on a change.
+   */
+  showStart(state: StartState): void {
+    const key =
+      state.kind === 'waiting'
+        ? `waiting:${state.joined}/${state.humans}`
+        : state.kind === 'count'
+          ? `count:${state.seconds}`
+          : state.kind;
+    if (key === this._startKey) return;
+    this._startKey = key;
+    this._start.dataset.state = state.kind;
+
+    switch (state.kind) {
+      case 'waiting': {
+        const missing = Math.max(0, state.humans - state.joined);
+        this._startCount.textContent = '';
+        this._startNote.textContent =
+          missing > 0
+            ? `Waiting for ${missing} more pilot${missing === 1 ? '' : 's'} · ` +
+              `${state.joined} of ${state.humans} connected`
+            : 'Everyone is in';
+        return;
+      }
+      case 'count':
+        this._startCount.textContent = String(state.seconds);
+        this._startNote.textContent = 'Get ready';
+        break;
+      case 'go':
+        this._startCount.textContent = 'GO';
+        this._startNote.textContent = '';
+        break;
+      case 'off':
+        this._startCount.textContent = '';
+        this._startNote.textContent = '';
+        return;
+    }
+
+    // Restart the pop on every new number. Changing the text alone would not
+    // replay an animation that has already run.
+    this._startCount.classList.remove('pop');
+    void this._startCount.offsetWidth;
+    this._startCount.classList.add('pop');
   }
 }
 

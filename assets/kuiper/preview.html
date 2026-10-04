@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>HelioTyper: Kuiper belt preview</title>
+<style>
+  body {
+    margin: 0; background: #05060f; color: #e8ecff;
+    font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px;
+  }
+  canvas { border-radius: 12px; background: #070914; }
+  code { color: #8fa0ff; }
+</style>
+
+<h2 style="margin:0">Kuiper belt: the field past Neptune</h2>
+<canvas id="kit" width="880" height="280"></canvas>
+<canvas id="field" width="880" height="420"></canvas>
+<p style="opacity:.6;margin:0">Regenerate with <code>node assets/kuiper/gen-kuiper.mjs</code></p>
+
+<script src="atlas.js"></script>
+<script type="module">
+const atlas = window.KUIPER_ATLAS;
+const img = new Image();
+img.src = atlas.image;
+await img.decode();
+
+function draw(ctx, name, x, y, scale, angle, alpha = 1) {
+  const f = atlas.frames[name];
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, f.x, f.y, f.w, f.h, -f.ax, -f.ay, f.w, f.h);
+  ctx.restore();
+}
+
+// Top: the kit, every frame turning slowly. Bottom: copies scattered through a
+// band three screens tall and streaming down, nearer ones bigger, brighter and
+// faster, roughly as the game draws them.
+const kit = document.getElementById('kit').getContext('2d');
+const field = document.getElementById('field').getContext('2d');
+const W = 880, H = 420;
+const names = [...atlas.bodies, 'arrokoth', 'haumea', ...atlas.pebbles];
+
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const rocks = Array.from({ length: 140 }, () => {
+  const pebble = rnd() < 0.6;
+  const list = pebble ? atlas.pebbles : atlas.bodies;
+  const depth = 0.45 + rnd() * 0.5;
+  return {
+    name: list[Math.floor(rnd() * list.length)],
+    x: rnd() * W,
+    y: rnd() * H * 3,
+    depth,
+    scale: (pebble ? 0.6 : 0.35) * (0.6 + depth),
+    angle: rnd() * Math.PI * 2,
+    spin: (rnd() - 0.5) * (pebble ? 1.4 : 0.4),
+  };
+}).sort((a, b) => a.depth - b.depth);
+
+function tick(ms) {
+  const t = ms / 1000;
+
+  kit.clearRect(0, 0, W, 280);
+  kit.font = '11px system-ui, sans-serif';
+  kit.textAlign = 'center';
+  kit.fillStyle = 'rgba(232, 236, 255, .55)';
+  names.forEach((name, i) => {
+    const x = 64 + (i % 7) * 125, y = 75 + Math.floor(i / 7) * 130;
+    draw(kit, name, x, y, atlas.pebbles.includes(name) ? 1.4 : 0.8, t * 0.25 + i);
+    kit.fillText(name, x, y + 58);
+  });
+
+  field.clearRect(0, 0, W, H);
+  for (const r of rocks) {
+    const y = ((r.y + t * 120 * r.depth) % (H * 3)) - H;
+    if (y < -60 || y > H + 60) continue;
+    draw(field, r.name, r.x, y, r.scale, r.angle + t * r.spin, 0.55 + (0.45 * (r.depth - 0.45)) / 0.5);
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>

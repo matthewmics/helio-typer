@@ -10,15 +10,23 @@ import {
 import { Logger, OnModuleDestroy } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { GuestService } from '../matchmaking/guest.service';
-import { RaceService, type RaceRecord } from './race.service';
+import {
+  RaceService,
+  type FinishRecord,
+  type RaceRecord,
+} from './race.service';
 import { RaceRoom } from './race.room';
-import { SNAPSHOT_HZ, TICK_HZ } from './race.config';
+import { JOIN_TIMEOUT_MS, SNAPSHOT_HZ, TICK_HZ } from './race.config';
 import {
   RACE_EVENTS,
   type PilotEventMsg,
   type PilotKeysMsg,
   type PilotState,
+  type RaceCountdownMsg,
+  type RaceFinishMsg,
+  type RaceLobbyMsg,
   type RacePilotInfo,
+  type RaceWelcomeMsg,
   type ResultRow,
 } from './race.protocol';
 
@@ -110,12 +118,33 @@ export class RaceGateway implements OnGatewayInit, OnGatewayDisconnect, OnModule
     this.sinceBroadcast = Math.min(this.sinceBroadcast - interval, interval);
 
     for (const [matchId, room] of this.owned) {
-      if (!room.started) continue;
+      if (!room.scheduled) await this.awaitStart(matchId, room, now);
 
+      // Sent from the moment the room exists, so the bots' rockets sit on the
+      // pad through the wait and the countdown rather than appearing at the start.
       if (room.bots.length > 0) {
         this.server
           .to(this.room(matchId))
           .emit(RACE_EVENTS.snapshot, { t: now, pilots: room.botStates(now) });
+      }
+
+      for (const bot of room.takeBotFinishes()) {
+        await this.bankFinish(matchId, bot.id, {
+          wpm: bot.wpm,
+          accuracy: bot.accuracy,
+          mistakes: bot.mistakes,
+          completionMs: bot.completionMs,
+          progress: 1,
+        });
+      }
+
+      // A human's finish is banked by whichever instance they are connected
+      // to, so this is how the owner learns of the ones connected elsewhere.
+      // Without it a race with a pilot on another instance never ends.
+      if (room.started(now) && !room.ended) {
+        for (const pilotId of Object.keys(await this.races.finishes(matchId))) {
+          room.markFinished(pilotId, now);
+        }
       }
 
       if (room.ended) {
@@ -174,41 +203,115 @@ export class RaceGateway implements OnGatewayInit, OnGatewayDisconnect, OnModule
       id: p.id,
       name: p.name,
       lane: p.lane,
+      ship: p.ship,
       isYou: p.id === guest.guestId,
     }));
 
-    client.emit(RACE_EVENTS.welcome, {
+    // Nobody races until everybody is in. Joining as the last human sets the
+    // start; anyone arriving after it (a refresh, a slow page) is handed it.
+    const humans = record.pilots.filter((p) => !p.bot).length;
+    const { startAt, joined, started } = await this.races.join(
+      matchId,
+      guest.guestId,
+      humans,
+    );
+    const finishes = await this.races.finishes(matchId);
+
+    const welcome: RaceWelcomeMsg = {
       matchId,
       youId: guest.guestId,
       seed: record.seed,
       pilots,
       snapshotHz: SNAPSHOT_HZ,
-    });
+      startAt,
+      now: Date.now(),
+      joined,
+      humans,
+      finishes: Object.entries(finishes).map(([id, f]) => ({
+        id,
+        completionMs: f.completionMs,
+        wpm: f.wpm,
+        mistakes: f.mistakes ?? 0,
+      })),
+    };
+    client.emit(RACE_EVENTS.welcome, welcome);
 
-    await this.ensureSimulated(record);
+    // Room-wide, and so cluster-wide: the pilots already waiting may be on any
+    // instance. This socket joined the room locally above, so it hears it too.
+    if (started && startAt !== null) {
+      this.announceStart(matchId, startAt);
+    } else if (startAt === null) {
+      const lobby: RaceLobbyMsg = { joined, humans };
+      this.server.to(this.room(matchId)).emit(RACE_EVENTS.lobby, lobby);
+    }
+
+    await this.ensureSimulated(record, startAt);
   }
 
   /**
-   * Make sure somebody is ticking this match, and start it on the first arrival.
+   * Make sure somebody is ticking this match, and hand it the start if there is one.
    *
    * Called on every join rather than at match confirmation, so a race whose owner
    * died is picked up by the next pilot to walk in rather than sitting with
    * motionless bots.
    */
-  private async ensureSimulated(record: RaceRecord): Promise<void> {
-    const existing = this.owned.get(record.matchId);
-    if (existing) {
-      existing.start();
+  private async ensureSimulated(
+    record: RaceRecord,
+    startAt: number | null,
+  ): Promise<void> {
+    let room = this.owned.get(record.matchId);
+    if (!room) {
+      if (!(await this.races.claim(record.matchId))) return;
+      room = new RaceRoom(record);
+      this.owned.set(record.matchId, room);
+      this.log.log(
+        `simulating race ${record.matchId.slice(0, 8)}: ${room.bots.length} bot pilots`,
+      );
+    }
+    if (startAt !== null) room.schedule(startAt);
+  }
+
+  /**
+   * For a room still waiting: pick up a start that a join through another
+   * instance set, or set one if someone has kept everyone waiting too long.
+   */
+  private async awaitStart(
+    matchId: string,
+    room: RaceRoom,
+    now: number,
+  ): Promise<void> {
+    const startAt = await this.races.startAt(matchId);
+    if (startAt !== null) {
+      room.schedule(startAt);
       return;
     }
-    if (!(await this.races.claim(record.matchId))) return;
+    if (now - room.record.createdAt < JOIN_TIMEOUT_MS) return;
 
-    const room = new RaceRoom(record);
-    room.start();
-    this.owned.set(record.matchId, room);
-    this.log.log(
-      `simulating race ${record.matchId.slice(0, 8)}: ${room.bots.length} bot pilots`,
-    );
+    const forced = await this.races.forceStart(matchId);
+    room.schedule(forced.startAt);
+
+    const joined = new Set(await this.races.joinedIds(matchId));
+    for (const pilot of room.record.pilots) {
+      if (!pilot.bot && !joined.has(pilot.id)) room.markAbsent(pilot.id, now);
+    }
+
+    if (forced.started) {
+      this.announceStart(matchId, forced.startAt);
+      this.log.log(
+        `race ${matchId.slice(0, 8)} starting without everyone: join timeout`,
+      );
+    }
+  }
+
+  /**
+   * Tell the whole room when the race starts.
+   *
+   * Exactly one caller ever gets here per race, the one whose script call set
+   * the start, so this is one emit and not one per instance.
+   */
+  private announceStart(matchId: string, startAt: number): void {
+    const msg: RaceCountdownMsg = { startAt, now: Date.now() };
+    this.server.to(this.room(matchId)).emit(RACE_EVENTS.countdown, msg);
   }
 
   handleDisconnect(client: Socket): void {
@@ -254,17 +357,42 @@ export class RaceGateway implements OnGatewayInit, OnGatewayDisconnect, OnModule
     if (msg.kind !== 'finish') return;
 
     try {
-      const room = this.owned.get(seat.matchId);
-      await this.races.recordFinish(seat.matchId, seat.pilotId, {
+      // Timed from the shared start, which every instance can read. It used to
+      // come from the owner's room, so a pilot connected to any other instance
+      // finished in zero seconds and always placed first.
+      const startAt = await this.races.startAt(seat.matchId);
+      await this.bankFinish(seat.matchId, seat.pilotId, {
         wpm: seat.last?.wpm ?? 0,
         accuracy: 100,
-        completionMs: room ? room.elapsedMs() : 0,
+        mistakes: seat.last?.mistakes ?? 0,
+        completionMs: startAt === null ? 0 : Math.max(0, Date.now() - startAt),
         progress: 1,
       });
-      room?.markFinished(seat.pilotId);
+      this.owned.get(seat.matchId)?.markFinished(seat.pilotId);
     } catch (err) {
       this.log.error(`could not record finish: ${(err as Error).message}`);
     }
+  }
+
+  /**
+   * Bank a finish and tell the whole room, once.
+   *
+   * Only the first finish a pilot sends is kept, and only the call that kept it
+   * announces it, so a repeat neither moves a time nor shows up twice.
+   */
+  private async bankFinish(
+    matchId: string,
+    pilotId: string,
+    finish: FinishRecord,
+  ): Promise<void> {
+    if (!(await this.races.recordFinish(matchId, pilotId, finish))) return;
+    const msg: RaceFinishMsg = {
+      id: pilotId,
+      completionMs: finish.completionMs,
+      wpm: finish.wpm,
+      mistakes: finish.mistakes,
+    };
+    this.server.to(this.room(matchId)).emit(RACE_EVENTS.finish, msg);
   }
 
   // -------------------------------------------------------------------------
@@ -298,6 +426,7 @@ export class RaceGateway implements OnGatewayInit, OnGatewayDisconnect, OnModule
           placement: 0,
           wpm: bot.race.wpm,
           accuracy: bot.race.accuracy,
+          mistakes: bot.race.mistakes,
           completionMs: done ? Math.round(bot.wallElapsed * 1000) : null,
           progress: bot.race.progress,
           dnf: !done,
@@ -312,6 +441,7 @@ export class RaceGateway implements OnGatewayInit, OnGatewayDisconnect, OnModule
         placement: 0,
         wpm: finish?.wpm ?? 0,
         accuracy: finish?.accuracy ?? 100,
+        mistakes: finish?.mistakes ?? null,
         completionMs: finish?.completionMs ?? null,
         progress: finish?.progress ?? 0,
         dnf: !finish,

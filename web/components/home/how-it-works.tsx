@@ -42,9 +42,9 @@ export function HowItWorks() {
         ))}
       </ol>
       <p className="mt-5 border-t border-line pt-4 text-sm text-ink-dim">
-        Six pilots a race, all typing the same sentences. When the queue is
-        quiet, bots fill the empty seats after five seconds, so there is always
-        a race to fly.
+        Six pilots a race, all typing the same passage of philosophy. When
+        the queue is quiet, bots fill the empty seats after five seconds, so
+        there is always a race to fly.
       </p>
     </Card>
   );

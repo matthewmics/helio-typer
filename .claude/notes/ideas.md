@@ -40,8 +40,10 @@ their hangar.
 - **Update 2026-10-04**: settled for now by keeping the portfolio build simple.
   No credits anywhere in the UI, no rarity, and every ship is open to every
   pilot. The roster is the twelve rockets in `assets/rockets/`, each its own
-  silhouette and exhaust colour. Equipping is still local to the hangar: every
-  pilot in a race flies the Vanguard until the race roster carries a ship.
+  silhouette and exhaust colour. The race roster carries a ship per pilot: each
+  bot gets a different one from the match seed, and humans fly the Vanguard
+  until their hangar choice travels with them. Equipping is still local to the
+  hangar.
 
 ---
 
@@ -262,7 +264,7 @@ client-side for feel, because input has to be local-authoritative or fast typist
 feel every round trip. That means a modified client can lie to the server, and
 the keystroke-log-replay pipeline only makes the *reported numbers* internally
 consistent, not necessarily *true*. Full anti-cheat (replaying keystrokes against
-the actual assigned sentence server-side, statistical outlier detection across
+the actual assigned passage server-side, statistical outlier detection across
 the playerbase, rate-limiting, a reporting/trust system) is a project of its own
 and is not worth building against a threat model where nothing but a leaderboard
 row is at stake. Worth building the log pipeline anyway, since it is the exact

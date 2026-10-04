@@ -1,26 +1,42 @@
 # Game mechanics
 
 The simulation: what typing does to the ship. These rules are locked. The
-reference implementation is `Race` in [web/game/race.ts](../../web/game/race.ts).
+reference implementation is `Race` in
+[packages/engine/src/race.ts](../../packages/engine/src/race.ts), the
+`@heliotyper/engine` workspace package.
 
-Keep `Race` free of rendering and DOM. It has to run on the server too, and one
-physics implementation shared by client and server is the whole defence against
-client/server divergence. It currently lives under `web/` only because that is
-where the game landed first; the moment the server needs to simulate a pilot it
-has to become a workspace package that both `web/` and `api/` import, not a
-second copy.
+Keep `Race` free of rendering and DOM. The server runs it too (every bot flies
+on it), and one physics implementation shared by client and server is the whole
+defence against client/server divergence. `web/` and `api/` both import the one
+package; never fork a second copy.
 
 ## Typing
 
-- Endless. Sentences are drawn from a pool and keep coming until the player
-  reaches the finish. There is no "end of text," so there is no paragraph length
-  to pace the race against.
-- Never the same sentence twice in a row.
-- The sequence is precomputed from a seed rather than drawn lazily, so every
-  pilot in a race walks the same list and their WPM is comparable. Mulberry32 is
-  used because it is identical across JS runtimes.
-- One sentence shown at a time, with per-character coloring for typed, current,
-  and pending characters.
+- One passage per race: a single long piece of philosophy, typed as continuous
+  text, with the spaces between its sentences typed like any other character.
+  The passages are `PASSAGES` in [text.ts](../../packages/engine/src/text.ts).
+  There is no admin site yet, so they live in code for now.
+- The passage is picked from the race seed (`passageFor`), so every pilot in a
+  race types the same text and their WPM is comparable. Mulberry32 is used
+  because it is identical across JS runtimes.
+- A passage can be any length. A race that outlasts it loops it (`Race.lap`):
+  the last character is followed by a space and the passage starts again, and
+  the next lap shows up under the line being typed like any other line, so
+  reading ahead never hits a wall. There is no end of text to pace the race
+  against: `raceDistance` alone sets how long a run takes.
+- Shown left-aligned in a window three lines tall, with per-character coloring
+  for typed, current, and pending characters. The line being typed sits at the
+  top with the next two below it, and the text scrolls up a line each time a
+  new one is reached, so the box never changes size and the next words are
+  always on screen.
+- Every space keeps its full width, the one a line wraps at included
+  (`white-space: break-spaces` on the prompt). By default the browser collapses
+  that space to nothing, and the cursor on it vanished with it, so every line
+  ended with no sign that the next key was the space bar.
+- Every line is the same size. An earlier version showed a dimmed, smaller
+  preview of the next sentence under the current one, and reading ahead from
+  small text was hard enough to cost WPM. Do not bring back a reduced-size
+  preview.
 - Backspace is unhandled by design. Whether that stays is still open, see
   [notes/ideas.md](../notes/ideas.md).
 
@@ -59,7 +75,7 @@ second copy.
   out, physics freeze, sparks burst, and the prompt goes dead with a live
   countdown (`stallDuration`, 1 second). After the countdown, hull refills,
   speed resets to the cruise floor, and typing resumes on the same character.
-- During a stall the whole sentence stays on screen, greyed out, with arcs
+- During a stall the passage stays on screen where it was, greyed out, with arcs
   flickering around the panel border and the countdown on a chip straddling the
   panel's top edge. Never hide the text: that is worst exactly when the player
   most wants to see where they will resume.

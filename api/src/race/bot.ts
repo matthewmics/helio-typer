@@ -1,4 +1,10 @@
-import { Race, makeRng } from '@heliotyper/engine';
+import {
+  DEFAULT_ROCKET,
+  Race,
+  ROCKET_IDS,
+  makeRng,
+  type RocketId,
+} from '@heliotyper/engine';
 import { BOT_ERROR_RATE, BOT_WPM_MAX, BOT_WPM_MIN } from './race.config';
 import type { PilotState } from './race.protocol';
 
@@ -37,8 +43,8 @@ export class BotPilot {
   constructor(id: string, name: string, seed: number, rng: () => number) {
     this.id = id;
     this.name = name;
-    // Same seed as everyone else in the match, so a bot types the same sentences
-    // the humans do rather than racing a private list.
+    // Same seed as everyone else in the match, so a bot types the same passage
+    // the humans do rather than racing a private one.
     this.race = new Race(seed);
     this._rng = rng;
 
@@ -66,7 +72,7 @@ export class BotPilot {
   }
 
   private _press(): void {
-    const expected = this.race.sentence[this.race.typedIndex];
+    const expected = this.race.expected;
     if (expected === undefined) return;
     if (this._rng() < this._errorRate) {
       // Any wrong character will do. 'x' is wrong often enough to be a mistake
@@ -91,13 +97,34 @@ export class BotPilot {
       launchT: r.launchT,
       wpm: r.wpm,
       stallTimer: r.stallTimer,
+      mistakes: r.mistakes,
     };
   }
 }
 
 /** One RNG per match, so a given seed always produces the same field of bots. */
 export function botRng(seed: number): () => number {
-  // Offset the seed so the bot draw does not walk the same stream the sentence
-  // sequence does. Same seed, independent sequence.
+  // Offset the seed so the bot draw does not walk the same stream the passage
+  // pick does. Same seed, independent sequence.
   return makeRng(seed ^ 0x5f3759df);
+}
+
+/**
+ * A ship for every seat in the lobby, shuffled from the match seed, so a given
+ * match always fields the same rockets. Only the bots' seats are used.
+ *
+ * Never the default, which is what every human flies for now, and never the
+ * same ship twice while there are ships to go round. The whole point is a field
+ * that looks like different pilots rather than a row of copies.
+ */
+export function seatShips(seed: number, seats: number): RocketId[] {
+  // Its own stream again, so ships do not shift if the bot draw ever changes.
+  const rng = makeRng(seed ^ 0x2c1b3c6d);
+  const pool = ROCKET_IDS.filter((id) => id !== DEFAULT_ROCKET);
+  // Fisher-Yates, so every ship is equally likely in every seat.
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return Array.from({ length: seats }, (_, i) => pool[i % pool.length]);
 }

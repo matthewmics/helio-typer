@@ -8,6 +8,7 @@ to it.
 |---|---|
 | [`rockets/`](rockets/) | the playable rockets — one spritesheet per rocket, plus the roster index |
 | [`planets/`](planets/) | the outbound run: moon, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto |
+| [`kuiper/`](kuiper/) | the Kuiper belt: a kit of icy rocks the game scatters past Neptune, plus Arrokoth and Haumea |
 | [`finish/`](finish/) | the finish line — the heliopause, at the edge of the solar system |
 | [`effects/`](effects/) | particle textures (smoke, spark, ember, star) and the hull-breach burst |
 | [`environment/`](environment/) | clouds, ground parallax strips, the launch pad |
@@ -23,6 +24,7 @@ writes its own output alongside itself:
 ```
 node assets/rockets/gen-rockets.mjs
 node assets/planets/gen-planets.mjs
+node assets/kuiper/gen-kuiper.mjs
 node assets/finish/gen-finish.mjs
 node assets/effects/gen-effects.mjs
 node assets/environment/gen-environment.mjs
@@ -59,11 +61,13 @@ only real changes show up in a diff.
 
 ```
 launch pad → clouds → moon → mars → jupiter → saturn
-           → uranus → neptune → pluto → THE HELIOPAUSE
+           → uranus → neptune → the Kuiper belt, with pluto in it
+           → THE HELIOPAUSE
 ```
 
-Everything you pass is a disc; the finish line is a wall you cross. That
-contrast is deliberate — see [`finish/README.md`](finish/README.md).
+Everything you pass is a body: the planets one at a time, the Kuiper belt a
+whole field of small ones. The finish line is a wall you cross. That contrast is
+deliberate, see [`finish/README.md`](finish/README.md).
 
 ## Not generated, on purpose
 

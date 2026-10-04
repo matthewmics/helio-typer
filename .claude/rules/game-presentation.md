@@ -22,13 +22,24 @@ engine beyond sprites and one particle emitter.
 
 ```
 launch pad -> clouds -> moon -> mars -> jupiter -> saturn
-           -> uranus -> neptune -> pluto -> THE HELIOPAUSE
+           -> uranus -> neptune -> kuiper belt (pluto inside it)
+           -> THE HELIOPAUSE
 ```
 
 - Every intermediate body (moon, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto)
   is a disc landmark the ship passes, sized for readability rather than
   real-world scale. See [assets/planets/README.md](../../assets/planets/README.md).
 - The moon is the first thing you pass, not the finish.
+- **The Kuiper belt** is the one landmark that is a stretch of the run rather
+  than a point on it (`KUIPER` in [config.ts](../../web/game/config.ts), drawn
+  by [KuiperBelt](../../web/game/actors/KuiperBelt.ts)): dozens of small icy
+  bodies from just past Neptune to 0.93, with Pluto inside it as in the real
+  solar system. It must stay a field of bodies you pass, streaming by on the
+  planets' own parallax, and never become a line across the screen. It ends
+  short of the finish so the last stretch is open space. Both of those keep the
+  heliopause the only edge in the race. A few rocks pass in front of the
+  rockets, kept to the sides so they never cross your own ship. The art is
+  [assets/kuiper/](../../assets/kuiper/README.md).
 - The finish is deliberately not a disc. The heliopause is a full-width
   shimmering aurora curtain spanning the screen, so reaching it reads as
   crossing an edge rather than passing one more planet. See
@@ -89,3 +100,15 @@ launch pad -> clouds -> moon -> mars -> jupiter -> saturn
   clear of the growing exhaust plume.
 - The progress rail carries a dot for every other pilot, smaller and paler than
   yours. It is the only place a pilot who is off screen still shows.
+- The rail has a tick per planet and a band for the Kuiper belt, since the belt
+  is a stretch rather than a point. Its label sits between Neptune's tick and
+  Pluto's, where neither covers it.
+- Before the start, an overlay above the pad says how many pilots the race is
+  still waiting for, then counts 3, 2, 1, GO. The passage is already on screen,
+  and keys do nothing until GO.
+- Crossing the heliopause opens the results over the race: your place,
+  highlighted, and your run's stats, above standings that stay live while
+  anyone is still flying and settle into the final ones when the race closes.
+  Each row shows place, pilot, mistakes, WPM and time. A pilot still flying
+  shows a progress bar in place of WPM and time, with their mistake count
+  ticking up live.

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GuestCard } from "@/components/auth/guest-card";
 import { AchievementList } from "@/components/profile/achievement-list";
 import { KeyHeatmap } from "@/components/profile/key-heatmap";
+import { LevelCard } from "@/components/profile/level-card";
 import { Sparkline } from "@/components/profile/sparkline";
 import { RaceHistoryList } from "@/components/race-history-list";
 import { Card, CardStack, CardTitle } from "@/components/ui/card";
@@ -78,6 +79,8 @@ export default async function ProfilePage() {
         </CardStack>
 
         <CardStack>
+          <LevelCard xp={PILOT.xp} />
+
           <Card>
             <CardTitle>Achievements</CardTitle>
             <AchievementList items={ACHIEVEMENTS} />

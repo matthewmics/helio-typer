@@ -31,6 +31,23 @@ export const BOT_WPM_MAX = 95;
 /** Chance per character that a bot fumbles it. */
 export const BOT_ERROR_RATE = 0.02;
 
+/**
+ * The countdown, from the last pilot connecting to the start.
+ *
+ * Nobody races until everybody is in. Pages load at different speeds, so
+ * starting each pilot as their own page came up handed the fastest connection
+ * a head start, and handed the bots one over everybody.
+ */
+export const COUNTDOWN_MS = 3_000;
+
+/**
+ * Start without a pilot who never turns up, counted from match confirmation.
+ *
+ * Someone who accepted and then closed the tab would otherwise hold everyone
+ * else on the pad forever. Their seat stays empty and they place as a DNF.
+ */
+export const JOIN_TIMEOUT_MS = 15_000;
+
 /** How long the race record and its roster outlive the match, in seconds. */
 export const RACE_TTL_S = 3600;
 

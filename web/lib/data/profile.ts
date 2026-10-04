@@ -1,9 +1,14 @@
+import { levelProgress } from "@/lib/levels";
 import type { Achievement, RaceResult } from "@/lib/types";
+
+/** Total experience. The level follows from it, so the two can never disagree. */
+const XP = 3154;
 
 /** The signed-in pilot. Static until there is a backend to read it from. */
 export const PILOT = {
   handle: "jaydee",
-  level: 14,
+  xp: XP,
+  level: levelProgress(XP).level,
   wpm: 87,
   accuracy: "96.4%",
   globalRank: 412,

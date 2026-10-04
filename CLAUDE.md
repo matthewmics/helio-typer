@@ -1,6 +1,6 @@
 # HelioTyper
 
-A typing race game: type a stream of sentences correctly to accelerate a rocket
+A typing race game: type a philosophy passage correctly to accelerate a rocket
 out of the solar system, all the way to the heliopause, the boundary where the
 solar wind stalls against interstellar space. Core mechanics are locked.
 
@@ -78,6 +78,8 @@ note as precedent.
 4. Multiplayer. Guest matchmaking is built and running in
    [api/src/matchmaking/](api/src/matchmaking/): queue, Dota-style ready check,
    bot fill, clustered over Redis. See
-   [matchmaking.md](.claude/rules/matchmaking.md). Still to come: the race itself,
-   room codes, countdown, minimap, multiple rockets.
+   [matchmaking.md](.claude/rules/matchmaking.md). Races now wait for every
+   pilot, start on a shared 3 second countdown, and end on live standings.
+   Bots each fly a different ship. Still to come: room codes, minimap, and
+   flying your own hangar ship in a race.
 5. Persistence (Postgres/Prisma) for race history and leaderboards.

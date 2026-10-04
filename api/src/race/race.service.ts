@@ -1,9 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import type { RocketId } from '@heliotyper/engine';
 import type { Redis } from 'ioredis';
 import { REDIS } from '../redis/redis.constants';
 import { HASH_TAG } from '../redis/redis.constants';
 import { INSTANCE_ID } from '../matchmaking/guest.service';
-import { OWNER_TTL_MS, RACE_TTL_S } from './race.config';
+import { COUNTDOWN_MS, OWNER_TTL_MS, RACE_TTL_S } from './race.config';
+import { FORCE_START, JOIN } from './race.scripts';
 
 /** Same `{mm}` hash tag as matchmaking, so every key stays in one slot. */
 const P = `${HASH_TAG}:`;
@@ -12,7 +14,24 @@ const KEYS = {
   race: (matchId: string) => `${P}race:${matchId}`,
   owner: (matchId: string) => `${P}race:${matchId}:owner`,
   finish: (matchId: string) => `${P}race:${matchId}:finish`,
+  joined: (matchId: string) => `${P}race:${matchId}:joined`,
+  start: (matchId: string) => `${P}race:${matchId}:start`,
 };
+
+/** ioredis grows a method per `defineCommand`, which its types cannot know about. */
+interface ScriptedRedis extends Redis {
+  raceJoin(...args: (string | number)[]): Promise<[number, number, number]>;
+  raceForceStart(...args: (string | number)[]): Promise<[number, number]>;
+}
+
+export interface JoinResult {
+  /** Server-clock ms the race starts at, or null while pilots are still connecting. */
+  startAt: number | null;
+  /** Humans connected so far. */
+  joined: number;
+  /** True for the one join that set the start, which is the one that announces it. */
+  started: boolean;
+}
 
 export interface RacePilotRecord {
   id: string;
@@ -20,6 +39,12 @@ export interface RacePilotRecord {
   bot: boolean;
   /** Fixed column, assigned once at creation so it never shifts mid-race. */
   lane: number;
+  /**
+   * The rocket this pilot is drawn as, decided once here so every screen draws
+   * the same one. Bots get one each from the seed; humans fly the default
+   * until the roster carries their hangar choice.
+   */
+  ship: RocketId;
 }
 
 export interface RaceRecord {
@@ -33,6 +58,7 @@ export interface RaceRecord {
 export interface FinishRecord {
   wpm: number;
   accuracy: number;
+  mistakes: number;
   completionMs: number;
   progress: number;
 }
@@ -48,11 +74,70 @@ export interface FinishRecord {
  * Everything else is deliberately ownerless. A human's cosmetic state is relayed
  * to the room by whichever instance received it, and the socket.io Redis adapter
  * puts it in front of everyone regardless of where they are connected. That means
- * the only cross-instance coordination in a race is this one claim.
+ * the only cross-instance coordination in a race is this one claim, and the
+ * start, which goes through a script (see race.scripts.ts).
  */
 @Injectable()
-export class RaceService {
+export class RaceService implements OnModuleInit {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
+
+  private get r(): ScriptedRedis {
+    return this.redis as ScriptedRedis;
+  }
+
+  onModuleInit(): void {
+    this.redis.defineCommand('raceJoin', { numberOfKeys: 2, lua: JOIN });
+    this.redis.defineCommand('raceForceStart', {
+      numberOfKeys: 1,
+      lua: FORCE_START,
+    });
+  }
+
+  /**
+   * Mark a pilot connected. The last human in sets the start, COUNTDOWN_MS out.
+   *
+   * Bots never join and are never waited for: they have no page to load.
+   */
+  async join(
+    matchId: string,
+    pilotId: string,
+    humans: number,
+  ): Promise<JoinResult> {
+    const [at, joined, fresh] = await this.r.raceJoin(
+      KEYS.joined(matchId),
+      KEYS.start(matchId),
+      pilotId,
+      humans,
+      Date.now(),
+      COUNTDOWN_MS,
+      RACE_TTL_S,
+    );
+    return { startAt: at < 0 ? null : at, joined, started: fresh === 1 };
+  }
+
+  /** Start without whoever has not connected. A no-op if the countdown already began. */
+  async forceStart(
+    matchId: string,
+  ): Promise<{ startAt: number; started: boolean }> {
+    const [at, fresh] = await this.r.raceForceStart(
+      KEYS.start(matchId),
+      Date.now(),
+      COUNTDOWN_MS,
+      RACE_TTL_S,
+    );
+    return { startAt: at, started: fresh === 1 };
+  }
+
+  /** Humans who have connected, by id. */
+  async joinedIds(matchId: string): Promise<string[]> {
+    return this.redis.smembers(KEYS.joined(matchId));
+  }
+
+  /** The start, once one has been set, wherever it was set. */
+  async startAt(matchId: string): Promise<number | null> {
+    const at = await this.redis.get(KEYS.start(matchId));
+    return at === null ? null : Number(at);
+  }
 
   /** Store the roster so any instance can answer a join, wherever it lands. */
   async open(record: RaceRecord): Promise<void> {
@@ -101,18 +186,24 @@ export class RaceService {
   }
 
   /**
-   * Record a finish.
+   * Record a finish, keeping only the first one a pilot sends.
    *
    * Written by whichever instance the pilot is connected to, read by the owner
    * when it builds the standings, which is why it goes through Redis rather than
-   * staying in the receiving process.
+   * staying in the receiving process. Returns whether this call was the one that
+   * recorded it, which is what decides who announces it.
    */
-  async recordFinish(matchId: string, pilotId: string, finish: FinishRecord): Promise<void> {
-    await this.redis
+  async recordFinish(
+    matchId: string,
+    pilotId: string,
+    finish: FinishRecord,
+  ): Promise<boolean> {
+    const replies = await this.redis
       .multi()
-      .hset(KEYS.finish(matchId), pilotId, JSON.stringify(finish))
+      .hsetnx(KEYS.finish(matchId), pilotId, JSON.stringify(finish))
       .expire(KEYS.finish(matchId), RACE_TTL_S)
       .exec();
+    return replies?.[0]?.[1] === 1;
   }
 
   async finishes(matchId: string): Promise<Record<string, FinishRecord>> {

@@ -17,7 +17,8 @@ export interface RaceConfig {
   /**
    * Total speed x time needed to cross the solar system: the one race-length knob.
    *
-   * Typing is endless, so there is no paragraph length to calibrate against.
+   * The passage loops when a race outlasts it, so there is no paragraph length
+   * to calibrate against.
    */
   raceDistance: number;
   maxSpeed: number;

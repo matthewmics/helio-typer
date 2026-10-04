@@ -3,6 +3,7 @@ import { CloudLayer } from '../actors/CloudLayer';
 import { Effects } from '../actors/Effects';
 import { Ground } from '../actors/Ground';
 import { Heliopause } from '../actors/Heliopause';
+import { KuiperBelt } from '../actors/KuiperBelt';
 import { PlanetRun } from '../actors/PlanetRun';
 import { Rocket } from '../actors/Rocket';
 import { drawSky } from '../actors/Sky';
@@ -11,9 +12,9 @@ import type { Atlas } from '../atlas';
 import { LANE_GAP } from '../config';
 import type { PilotEventKind, RaceNetClient, RacePilotInfo } from '../net';
 import { viewOfRace, type PilotView } from '../pilot';
-import { type Atlases, loadRocket, type RocketId } from '../resources';
+import { type Atlases, DEFAULT_ROCKET, loadRocket, type RocketId } from '../resources';
 import { Stage } from '../stage';
-import { Hud } from '../ui/hud';
+import { Hud, type StartState } from '../ui/hud';
 import { approach } from '../util';
 import { fieldY, makeView, SHIP_BASE_OFFSET, type View } from '../view';
 
@@ -23,13 +24,30 @@ const MAX_DT = 0.05;
 /** How often the local pilot's state goes up, in Hz. Matches the server broadcast. */
 const SEND_HZ = 12;
 
+/** How long GO stays up once the count runs out, in ms. */
+const GO_MS = 800;
+
+/** How a run went, for the results. */
+export interface RunResult {
+  /** Crossed the heliopause, rather than the race ending around you. */
+  finished: boolean;
+  wpm: number;
+  accuracy: number;
+  mistakes: number;
+  progress: number;
+  /** Wall-clock ms from the start, stalls included, to the finish or to now. */
+  timeMs: number;
+}
+
 export interface RaceSceneOptions {
-  /** Shared by every pilot in the match, so everyone types the same sentences. */
+  /** Shared by every pilot in the match, so everyone types the same passage. */
   seed: number;
   /** Callsign on your own name pill. */
   youName: string;
   /** Absent for a solo run, in which case the field is just you. */
   net?: RaceNetClient;
+  /** Called the moment you cross the heliopause. */
+  onFinish?: (result: RunResult) => void;
 }
 
 /**
@@ -50,6 +68,7 @@ export class RaceScene {
   private readonly _ground: Ground;
   private readonly _clouds: CloudLayer;
   private readonly _planets: PlanetRun;
+  private readonly _belt: KuiperBelt;
   private readonly _heliopause: Heliopause;
   private readonly _effects: Effects;
 
@@ -59,6 +78,8 @@ export class RaceScene {
   private readonly _others = new Map<string, Rocket>();
   /** Screen x offset per pilot id, fixed for the race. */
   private readonly _laneX = new Map<string, number>();
+  /** Pilots whose own rocket sheet is still on its way. */
+  private readonly _shipsLoading = new Set<string>();
 
   /** Eased toward real speed, so a stall reads as deceleration rather than a cut. */
   private _camSpeed = 0;
@@ -68,12 +89,19 @@ export class RaceScene {
   private _view: View;
   private _disposed = false;
 
+  private readonly _onFinish: ((result: RunResult) => void) | null;
+  /** A solo run starts on its first keystroke, so its clock does too. */
+  private _soloStartAt: number | null = null;
+  private _finishedAt: number | null = null;
+
   constructor(canvas: HTMLCanvasElement, art: Atlases, options: RaceSceneOptions) {
     this._net = options.net ?? null;
+    this._onFinish = options.onFinish ?? null;
     this._stage = new Stage(canvas);
 
     this._race = new Race(options.seed, {
       onLaunch: () => {
+        if (!this._net) this._soloStartAt = Date.now();
         this._hud.hideHint();
         this._you.playBlastoff();
         this._effects.launch(this._view.cx, this._view.shipY + SHIP_BASE_OFFSET + 4);
@@ -93,8 +121,9 @@ export class RaceScene {
       },
       onRecover: () => this._net?.sendEvent('recover'),
       onFinish: () => {
-        this._hud.showEnd();
+        this._finishedAt = Date.now();
         this._net?.sendEvent('finish');
+        this._onFinish?.(this.result());
       },
       onPrompt: () => this._hud.renderPrompt(),
     });
@@ -103,6 +132,7 @@ export class RaceScene {
     this._ground = new Ground(art.environment);
     this._clouds = new CloudLayer(art.environment);
     this._planets = new PlanetRun(art.planets, art.effects);
+    this._belt = new KuiperBelt(art.kuiper, art.effects);
     this._heliopause = new Heliopause(art.finish);
     this._effects = new Effects(art.effects);
     this._you = this._buildField(options.youName, art.rocket, art.effects);
@@ -148,11 +178,50 @@ export class RaceScene {
   }
 
   restart(): void {
+    // The HUD first: resetting the race re-renders the prompt, and the HUD has
+    // to have forgotten how far the old run got by then.
+    this._hud.reset();
     this._race.reset();
     this._effects.clear();
     this._camSpeed = 0;
     this._worldScroll = 0;
-    this._hud.hideEnd();
+    this._soloStartAt = null;
+    this._finishedAt = null;
+  }
+
+  /** Your run so far, or at the finish once you have crossed. */
+  result(): RunResult {
+    const race = this._race;
+    const startAt = this._net ? this._net.startAt : this._soloStartAt;
+    const end = this._finishedAt ?? Date.now();
+    return {
+      finished: race.phase === 'finished',
+      wpm: race.wpm,
+      accuracy: race.accuracy,
+      mistakes: race.mistakes,
+      progress: race.progress,
+      timeMs: startAt === null ? 0 : Math.max(0, end - startAt),
+    };
+  }
+
+  /**
+   * Keys count once the race has started. A solo run has nobody to wait for;
+   * a matched one waits for every pilot and then the countdown, so nobody
+   * whose page loaded first gets a head start.
+   */
+  private _canType(): boolean {
+    const net = this._net;
+    return !net || (net.startAt !== null && Date.now() >= net.startAt);
+  }
+
+  /** What the start overlay should say this frame. */
+  private _startState(): StartState {
+    const net = this._net;
+    if (!net) return { kind: 'off' };
+    if (net.startAt === null) return { kind: 'waiting', joined: net.joined, humans: net.humans };
+    const left = net.startAt - Date.now();
+    if (left > 0) return { kind: 'count', seconds: Math.ceil(left / 1000) };
+    return left > -GO_MS ? { kind: 'go' } : { kind: 'off' };
   }
 
   /**
@@ -165,7 +234,7 @@ export class RaceScene {
    */
   private _buildField(youName: string, ship: Atlas, effects: Atlas): Rocket {
     const roster: RacePilotInfo[] = this._net?.pilots ?? [
-      { id: 'you', name: youName, lane: 0, isYou: true },
+      { id: 'you', name: youName, lane: 0, ship: DEFAULT_ROCKET, isYou: true },
     ];
 
     const others = roster.filter((p) => !p.isYou).sort((a, b) => a.lane - b.lane);
@@ -181,7 +250,22 @@ export class RaceScene {
     });
 
     for (const pilot of others) {
-      this._others.set(pilot.id, new Rocket(ship, effects, pilot.name));
+      const rocket = new Rocket(ship, effects, pilot.name);
+      this._others.set(pilot.id, rocket);
+      if (pilot.ship === DEFAULT_ROCKET) continue;
+
+      // Their own sheet, fetched only for the rockets actually in this race.
+      // Kept off screen until it lands, so nobody is seen as the default and
+      // then swaps; if it never lands, they fly the default instead.
+      this._shipsLoading.add(pilot.id);
+      loadRocket(pilot.ship)
+        .then((atlas) => {
+          if (!this._disposed) rocket.useRocket(atlas);
+        })
+        .catch(() => {
+          // Leave them on the default rocket.
+        })
+        .finally(() => this._shipsLoading.delete(pilot.id));
     }
     return new Rocket(ship, effects, you.name);
   }
@@ -192,6 +276,7 @@ export class RaceScene {
     // Single printable characters only. Backspace stays unhandled by design.
     if (e.key.length !== 1) return;
     e.preventDefault();
+    if (!this._canType()) return;
     // Applied locally with no round trip. At 100+ WPM a key lands every ~120ms,
     // well inside typical latency, so waiting on the server would feel sluggish
     // to exactly the players who notice most.
@@ -233,6 +318,7 @@ export class RaceScene {
 
     this._effects.update(dt);
     this._hud.update(dt);
+    this._hud.showStart(this._startState());
 
     this._pump(dt, mine);
   }
@@ -242,21 +328,27 @@ export class RaceScene {
    * whole depth story.
    *
    * Every rocket goes down between the two halves of the cloud band, which is what
-   * sells flying through the weather rather than past a picture of it. Other
-   * pilots go before yours, so a crowded lane never hides your own ship at the
-   * moment you most need to see it.
+   * sells flying through the weather rather than past a picture of it. The
+   * Kuiper belt is split around the rockets the same way. Other pilots go before
+   * yours, so a crowded lane never hides your own ship at the moment you most
+   * need to see it.
+   *
+   * The belt goes down after the planets, since Pluto is the furthest thing in
+   * it, and before the heliopause, whose glow then lies over it.
    */
   private _draw(ctx: CanvasRenderingContext2D): void {
     const view = this._view;
     drawSky(ctx, view);
     this._stars.draw(ctx, view);
     this._planets.draw(ctx, view);
+    this._belt.drawBehind(ctx, view);
     this._heliopause.draw(ctx, view);
     this._ground.draw(ctx, view);
     this._clouds.drawBehind(ctx, view);
     for (const rocket of this._others.values()) rocket.draw(ctx, view);
     this._you.draw(ctx, view);
     this._clouds.drawInFront(ctx, view);
+    this._belt.drawInFront(ctx, view);
     this._effects.draw(ctx);
   }
 
@@ -270,9 +362,9 @@ export class RaceScene {
 
     for (const [id, rocket] of this._others) {
       const state: PilotView | null = net.field.view(id, this._race.cfg.maxHull);
-      // Nothing has arrived for this pilot yet. Better an empty lane than a
-      // rocket parked on the pad that jumps once the first snapshot lands.
-      rocket.visible = state !== null;
+      // Nothing has arrived for this pilot yet, or their ship has not. Better an
+      // empty lane than a rocket that jumps, or changes shape, a moment later.
+      rocket.visible = state !== null && !this._shipsLoading.has(id);
       this._hud.placePilot(id, state ? state.progress : null);
       if (state) rocket.sync(state, dt, view.cx + (this._laneX.get(id) ?? 0), fieldY(view, state.progress));
     }
@@ -300,6 +392,7 @@ export class RaceScene {
       launchT: mine.launchT,
       wpm: this._race.wpm,
       stallTimer: this._race.stallTimer,
+      mistakes: this._race.mistakes,
     });
   }
 }

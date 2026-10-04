@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { RaceNetClient } from "@/game/net";
 import { loadArt } from "@/game/resources";
-import { RaceScene } from "@/game/scenes/RaceScene";
+import { RaceScene, type RunResult } from "@/game/scenes/RaceScene";
+import type { ResultRow } from "@/lib/race/use-race-connection";
+import { FinishModal } from "./finish-modal";
 import { RaceHud } from "./race-hud";
 import "./race-game.css";
 
@@ -16,6 +18,8 @@ export type RaceGameProps = {
   youName: string;
   /** Absent for a solo run, in which case the field is just you. */
   net?: RaceNetClient;
+  /** Final standings, once the server has closed the race. */
+  final?: ResultRow[] | null;
 };
 
 /**
@@ -26,9 +30,11 @@ export type RaceGameProps = {
  * until the effect below calls into it, which is what keeps these imports safe
  * during server rendering.
  */
-export function RaceGame({ seed, youName, net }: RaceGameProps) {
+export function RaceGame({ seed, youName, net, final = null }: RaceGameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const sceneRef = useRef<RaceScene | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "booting" });
+  const [result, setResult] = useState<RunResult | null>(null);
 
   useEffect(() => {
     // React remounts this component on every save in development, and StrictMode
@@ -41,7 +47,9 @@ export function RaceGame({ seed, youName, net }: RaceGameProps) {
       .then((art) => {
         const canvas = canvasRef.current;
         if (cancelled || !canvas) return;
-        scene = new RaceScene(canvas, art, { seed, youName, net });
+        setResult(null);
+        scene = new RaceScene(canvas, art, { seed, youName, net, onFinish: setResult });
+        sceneRef.current = scene;
         setStatus({ kind: "running" });
       })
       .catch((err: unknown) => {
@@ -52,8 +60,14 @@ export function RaceGame({ seed, youName, net }: RaceGameProps) {
     return () => {
       cancelled = true;
       scene?.dispose();
+      sceneRef.current = null;
     };
   }, [seed, youName, net]);
+
+  const flyAgain = () => {
+    sceneRef.current?.restart();
+    setResult(null);
+  };
 
   return (
     <div className="race-root">
@@ -74,6 +88,16 @@ export function RaceGame({ seed, youName, net }: RaceGameProps) {
             If the sprite sheets are missing, run <code>pnpm --filter web sync:assets</code>.
           </p>
         </div>
+      )}
+
+      {/* Opens the moment you cross, or when the race closes without you. */}
+      {(result || final) && (
+        <FinishModal
+          result={result}
+          net={net}
+          final={final}
+          onFlyAgain={net ? undefined : flyAgain}
+        />
       )}
     </div>
   );

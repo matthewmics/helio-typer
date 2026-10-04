@@ -75,7 +75,7 @@ export interface MatchProgressMsg {
 /** Everyone accepted. This is the handoff to the race itself. */
 export interface MatchConfirmedMsg {
   matchId: string;
-  /** Drives the shared sentence sequence, so every pilot types the same list. */
+  /** Picks the shared passage, so every pilot types the same text. */
   seed: number;
   pilots: MatchPilot[];
 }

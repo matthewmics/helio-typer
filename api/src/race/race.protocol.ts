@@ -1,4 +1,4 @@
-import type { Phase } from '@heliotyper/engine';
+import type { Phase, RocketId } from '@heliotyper/engine';
 
 /**
  * The in-race wire protocol, and with it the trust boundary from the three-flow
@@ -31,6 +31,8 @@ export interface PilotState {
   launchT: number;
   wpm: number;
   stallTimer: number;
+  /** Wrong keys so far, for the standings. */
+  mistakes: number;
 }
 
 /** One-shot animation triggers. Pushed immediately, never held for a snapshot. */
@@ -69,17 +71,57 @@ export interface RacePilotInfo {
   name: string;
   /** Fixed column for this pilot, 0-based. Decides where their rocket sits. */
   lane: number;
+  /** The rocket to draw them as. */
+  ship: RocketId;
   isYou: boolean;
 }
 
 export interface RaceWelcomeMsg {
   matchId: string;
   youId: string;
-  /** Drives the sentence sequence, so every pilot types the same list. */
+  /** Picks the passage, so every pilot types the same text. */
   seed: number;
   pilots: RacePilotInfo[];
   /** How often the server pushes bot state, so the client can size its buffer. */
   snapshotHz: number;
+  /** Server-clock ms the race starts at, or null while pilots are still connecting. */
+  startAt: number | null;
+  /** The server clock as this was sent, so the client can place `startAt` on its own. */
+  now: number;
+  /** Humans connected so far, out of `humans`. Bots are never waited for. */
+  joined: number;
+  humans: number;
+  /** Everyone who has already crossed, for a pilot arriving mid-race. */
+  finishes: RaceFinishMsg[];
+}
+
+/**
+ * A pilot crossed the heliopause. Sent the moment the server banks it, to the
+ * whole room, so everyone's standings agree on the order.
+ *
+ * `completionMs` is measured from the shared start on the server, never the
+ * pilot's own clock, so it is the official time placings are decided on.
+ */
+export interface RaceFinishMsg {
+  id: string;
+  completionMs: number;
+  wpm: number;
+  mistakes: number;
+}
+
+/** Someone else connected. Sent while the race is still waiting for everyone. */
+export interface RaceLobbyMsg {
+  joined: number;
+  humans: number;
+}
+
+/**
+ * Everyone is in, or the wait ran out: the race starts at `startAt`. Keys do
+ * nothing before it, and the bots hold on the pad until it.
+ */
+export interface RaceCountdownMsg {
+  startAt: number;
+  now: number;
 }
 
 /**
@@ -117,6 +159,8 @@ export interface ResultRow {
   placement: number;
   wpm: number;
   accuracy: number;
+  /** Null for a human who never finished: their count was never banked. */
+  mistakes: number | null;
   completionMs: number | null;
   progress: number;
   dnf: boolean;
@@ -136,6 +180,9 @@ export const RACE_EVENTS = {
 
   // server -> client
   welcome: 'race:welcome',
+  lobby: 'race:lobby',
+  countdown: 'race:countdown',
+  finish: 'race:finish',
   snapshot: 'race:snapshot',
   event: 'race:event',
   results: 'race:results',

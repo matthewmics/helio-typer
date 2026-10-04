@@ -1,4 +1,9 @@
+import { DEFAULT_ROCKET, type RocketId } from '@heliotyper/engine';
 import { Atlas, type AtlasJson } from './atlas';
+
+// The rocket names live in the engine, the one package the server imports too,
+// since it picks the bots' ships from the same list the browser draws them from.
+export { DEFAULT_ROCKET, ROCKET_IDS, type RocketId } from '@heliotyper/engine';
 
 // ---------------------------------------------------------------------------
 // The prototype reached straight into the repo's assets/ folder using Vite's
@@ -14,17 +19,6 @@ import { Atlas, type AtlasJson } from './atlas';
 
 const BASE = '/game';
 
-/** Every rocket in assets/rockets/index.json, in roster order. */
-export const ROCKET_IDS = [
-  'vanguard', 'kestrel', 'marauder', 'bulwark', 'halcyon', 'gemini',
-  'visitor', 'sunjammer', 'pioneer', 'junker', 'manta', 'prism',
-] as const;
-
-export type RocketId = (typeof ROCKET_IDS)[number];
-
-/** What every pilot flies until the race roster carries each pilot's ship. */
-export const DEFAULT_ROCKET: RocketId = 'vanguard';
-
 export interface RocketEntry {
   id: RocketId;
   label: string;
@@ -36,6 +30,7 @@ export interface RocketEntry {
  */
 const SHEETS = {
   planets: 'planets/planets',
+  kuiper: 'kuiper/kuiper',
   finish: 'finish/finish',
   effects: 'effects/effects',
   environment: 'environment/environment',
@@ -50,6 +45,7 @@ export interface Atlases {
   /** {@link DEFAULT_ROCKET}, loaded up front with the scenery. */
   rocket: Atlas;
   planets: Atlas;
+  kuiper: Atlas;
   finish: Atlas;
   effects: Atlas;
   environment: Atlas;
@@ -109,6 +105,7 @@ async function fetchArt(): Promise<Atlases> {
   return {
     rocket,
     planets: sheet.planets,
+    kuiper: sheet.kuiper,
     finish: sheet.finish,
     effects: sheet.effects,
     environment: sheet.environment,

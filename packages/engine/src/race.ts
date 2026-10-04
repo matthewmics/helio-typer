@@ -1,5 +1,5 @@
 import { ATMO_END, DEFAULT_CONFIG, EPS, LAUNCH_DURATION, TIER_LEN, type RaceConfig } from './config';
-import { buildSentenceSequence } from './text';
+import { passageFor } from './text';
 
 export type Phase = 'racing' | 'stalled' | 'finished';
 
@@ -38,12 +38,15 @@ export class Race {
   readonly hooks: RaceHooks;
   readonly seed: number;
 
-  /** Every sentence this race will serve, drawn from the seed. */
-  private readonly _sequence: string[];
-  private _sentenceIndex = 0;
-
-  sentence = '';
-  /** Index within the CURRENT sentence, not the run. */
+  /** The one passage this race is typed from, drawn from the seed. */
+  readonly passage: string;
+  /**
+   * One time round the text: the passage and the space that joins it to the
+   * next time round. A race that outlasts the passage just loops it, so a
+   * passage can be any length.
+   */
+  readonly lap: string;
+  /** How far into the looped text the cursor is. Counts on across laps. */
   typedIndex = 0;
   mistakes = 0;
   correctChars = 0;
@@ -68,22 +71,21 @@ export class Race {
   constructor(seed: number, hooks: RaceHooks = {}) {
     this.seed = seed;
     this.hooks = hooks;
-    this._sequence = buildSentenceSequence(seed);
+    this.passage = passageFor(seed);
+    this.lap = `${this.passage} `;
     // Deliberately not `reset()`: hooks must not fire during construction, since
     // whatever handles them is generally built from the Race that is still being
     // constructed. Callers render the first prompt themselves.
     this._clear();
   }
 
-  /** Restart the run on the same sequence. Safe to call at any time. */
+  /** Restart the run on the same passage. Safe to call at any time. */
   reset(): void {
     this._clear();
     this.hooks.onPrompt?.();
   }
 
   private _clear(): void {
-    this._sentenceIndex = 0;
-    this.sentence = this._sequence[0];
     this.typedIndex = 0;
     this.mistakes = 0;
     this.correctChars = 0;
@@ -98,17 +100,9 @@ export class Race {
     this._started = false;
   }
 
-  /**
-   * Advance to the next sentence, wrapping at the end of the drawn sequence.
-   *
-   * Wrapping rather than drawing more keeps the run deterministic for its whole
-   * length. A pilot fast enough to exhaust 256 sentences has typed far past any
-   * race length the distance knob can produce.
-   */
-  private _nextSentence(): void {
-    this._sentenceIndex = (this._sentenceIndex + 1) % this._sequence.length;
-    this.sentence = this._sequence[this._sentenceIndex];
-    this.typedIndex = 0;
+  /** The character the next keystroke has to be. */
+  get expected(): string {
+    return this.lap[this.typedIndex % this.lap.length];
   }
 
   // -------------------------------------------------------------------------
@@ -125,7 +119,7 @@ export class Race {
   typeKey(key: string): void {
     if (this.phase !== 'racing') return;
 
-    if (key === this.sentence[this.typedIndex]) {
+    if (key === this.expected) {
       if (!this._started) {
         this._started = true;
         this.launched = true;
@@ -135,8 +129,6 @@ export class Race {
       this.typedIndex++;
       this.correctChars++;
       this.speed = Math.min(this.cfg.maxSpeed, this.speed + this.cfg.accel);
-
-      if (this.typedIndex >= this.sentence.length) this._nextSentence();
       this.hooks.onPrompt?.();
       return;
     }

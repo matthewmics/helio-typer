@@ -1,8 +1,8 @@
 import type { Rgb } from './util';
 
 /**
- * Every generator in assets/ writes the same atlas shape, so one loader covers all
- * five groups.
+ * Every generator in assets/ writes the same atlas shape, so one loader covers
+ * every group.
  *
  * The convention that matters is the per-frame anchor: `ax`/`ay` is the point that
  * should land on the position you draw at. Every draw in the game therefore comes
@@ -34,6 +34,10 @@ export interface AtlasJson {
   tintable?: string[];
   /** Disc radius per frame, where the cell is bigger than the body (rings). Planets only. */
   radii?: Record<string, number>;
+  /** The generic rocks, scattered by the dozen. Kuiper belt only. */
+  bodies?: string[];
+  /** The small fry, for the far field. Kuiper belt only. */
+  pebbles?: string[];
   /** Frames whose pattern repeats seamlessly along x. */
   tileableX?: string[];
 }

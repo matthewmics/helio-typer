@@ -38,6 +38,11 @@ queue:join -> waiting -> match:found -> everyone accepts -> match:confirmed
   rather than resetting the clock.
 - Bots are created pre-accepted. There is no socket to prompt, so a pending bot
   would deadlock every ready check it appeared in.
+- **Each bot flies its own ship**, assigned in the race record when the match is
+  confirmed (`seatShips` in `api/src/race/bot.ts`). It is shuffled from the match
+  seed, never the default and never the same ship twice, so a field of bots
+  reads as different pilots. Humans fly the default for now. The ship list
+  itself lives in `@heliotyper/engine`, the one package both sides import.
 - Ready check is 15 seconds, Dota style, with a live accepted count.
 - **A decline fails the match immediately.** Everyone who did not decline goes
   back in the queue at their *original* score, so they keep their place in line
@@ -50,6 +55,26 @@ queue:join -> waiting -> match:found -> everyone accepts -> match:confirmed
 
 Timings are in `matchmaking.config.ts`. They are policy, not physics, and none of
 them belong in the shared race config.
+
+## The start
+
+- **Nobody races until everybody is in.** Each human's `race:join` marks them
+  connected, and the last one in sets a single start 3 seconds out
+  (`COUNTDOWN_MS`). Every pilot's keys and every bot go on that one start. It
+  used to be the first arrival, which handed the bots and whoever's page loaded
+  first a head start.
+- Marking a pilot connected and setting the start is one Lua script
+  (`race.scripts.ts`), so two pilots connecting through two instances cannot
+  both set it. Only the call that set it announces it (`race:countdown`).
+- **A pilot who never connects is waited on for 15 seconds** from confirmation
+  (`JOIN_TIMEOUT_MS`), then the race starts without them and they place as a
+  DNF.
+- **Finishes are timed from that shared start**, by whichever instance the
+  pilot is connected to, and announced to the room once (`race:finish`). That
+  is what lets every client's live standings agree on the order, and what lets
+  the owner end a race whose pilots are spread across instances.
+
+Timings are in `api/src/race/race.config.ts`.
 
 ## Running clustered
 

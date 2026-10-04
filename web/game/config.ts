@@ -172,6 +172,42 @@ export const PLANET_HALO_SPAN = 2.4;
 export const PLANET_HALO_OPACITY = 0.34;
 
 /**
+ * The Kuiper belt: a field of small icy bodies past Neptune, with Pluto inside
+ * it, as in the real solar system.
+ *
+ * The one landmark that is a stretch of the run rather than a point on it, so it
+ * has a start and an end instead of an `at`. It stops short of the finish on
+ * purpose: the last stretch before the heliopause is open space, so the curtain
+ * is still the only edge in the race and the crossing is never cluttered.
+ */
+export const KUIPER = {
+  from: 0.8,
+  to: 0.93,
+  /** Where its rail label sits: between Neptune's and Pluto's, clear of both. */
+  labelAt: 0.835,
+  /** Fixed, so the belt is the same place in every race and on every screen. */
+  seed: 2019,
+  /** Rocks that tumble past behind the rockets. */
+  rocks: 30,
+  /** Small fry, further out. */
+  pebbles: 55,
+  /** Specks too small to make out, which are what make it read as a belt rather than a few rocks. */
+  dust: 260,
+  /** Rocks passed so close they draw in front of the rockets. They keep to the sides. */
+  near: 7,
+} as const;
+
+/**
+ * The two real objects in the belt's kit, placed once each at mid-depth, where
+ * they stay on screen long enough to be noticed. Haumea turns fastest because
+ * it really does.
+ */
+export const KUIPER_NAMED = [
+  { frame: 'arrokoth', at: 0.84, x: 0.8, depth: 0.72, scale: 0.85, spin: 6 },
+  { frame: 'haumea', at: 0.9, x: 0.17, depth: 0.64, scale: 0.8, spin: 24 },
+] as const;
+
+/**
  * How far past every screen edge the full-width layers draw (sky, horizon glow,
  * ground strips, heliopause), so screen shake never exposes the edge of one.
  *

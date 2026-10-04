@@ -1,4 +1,4 @@
-import type { Phase } from '@heliotyper/engine';
+import type { Phase, RocketId } from '@heliotyper/engine';
 import type { PilotView } from './pilot';
 
 /** One pilot's state as it travels. Mirrors `api/src/race/race.protocol.ts`. */
@@ -14,6 +14,8 @@ export interface PilotStateWire {
   launchT: number;
   wpm: number;
   stallTimer: number;
+  /** Wrong keys so far, for the standings. */
+  mistakes: number;
 }
 
 export type PilotEventKind = 'launch' | 'mistake' | 'breach' | 'recover' | 'finish';
@@ -22,7 +24,16 @@ export interface RacePilotInfo {
   id: string;
   name: string;
   lane: number;
+  /** The rocket to draw them as, decided by the server so every screen agrees. */
+  ship: RocketId;
   isYou: boolean;
+}
+
+/** A finish the server has banked. Its time is the official one placings go by. */
+export interface PilotFinish {
+  completionMs: number;
+  wpm: number;
+  mistakes: number;
 }
 
 /** What the scene needs from the network. Kept narrow so a solo race can pass null. */
@@ -31,6 +42,19 @@ export interface RaceNetClient {
   pilots: RacePilotInfo[];
   /** Buffered remote state, played back interpolated. */
   field: RemoteField;
+  /**
+   * When the race starts, on this browser's clock, or null while the server is
+   * still waiting for pilots to connect. Keys do nothing before it.
+   *
+   * This and the fields below are updated in place as the server reports in,
+   * so whoever needs them reads them when they need them.
+   */
+  startAt: number | null;
+  /** Humans connected, out of `humans`. Bots are never waited for. */
+  joined: number;
+  humans: number;
+  /** Banked finishes by pilot id. */
+  finishes: Map<string, PilotFinish>;
   sendState(state: PilotStateWire): void;
   sendEvent(kind: PilotEventKind): void;
   onEvent(handler: (pilotId: string, kind: PilotEventKind) => void): void;
@@ -82,6 +106,16 @@ export class RemoteField {
       // the playback window is dead weight.
       while (buffer.length > 2 && now - buffer[1].t > this._delayMs * 3) buffer.shift();
     }
+  }
+
+  /**
+   * The newest sample as it arrived, uninterpolated, or null if nothing has.
+   * For readouts like the standings, which want the latest count, not a
+   * position smoothed into the past.
+   */
+  latest(id: string): PilotStateWire | null {
+    const buffer = this._buffers.get(id);
+    return buffer && buffer.length > 0 ? buffer[buffer.length - 1] : null;
   }
 
   /** The pilot as they should be drawn right now, or null if nothing has arrived. */

@@ -12,6 +12,8 @@ import { Logger, OnModuleDestroy } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { GuestService, INSTANCE_ID, type Guest } from './guest.service';
 import { MatchmakingService, type MatchRecord } from './matchmaking.service';
+import { DEFAULT_ROCKET } from '@heliotyper/engine';
+import { seatShips } from '../race/bot';
 import { RaceService } from '../race/race.service';
 import { MM_EVENTS, type ReadyDecisionMsg } from './matchmaking.protocol';
 import { QUEUE_TICK_MS, SWEEP_TICK_MS } from './matchmaking.config';
@@ -263,7 +265,9 @@ export class MatchmakingGateway
     // yet would be a join for an unknown match.
     //
     // Lanes are assigned here, once, in roster order. Deciding them per client
-    // would let two pilots draw themselves in the same column.
+    // would let two pilots draw themselves in the same column. Ships too, for
+    // the same reason: every screen has to draw a bot as the same rocket.
+    const ships = seatShips(match.seed, match.players.length);
     await this.races.open({
       matchId: match.id,
       seed: match.seed,
@@ -273,6 +277,7 @@ export class MatchmakingGateway
         name: p.name,
         bot: p.bot,
         lane,
+        ship: p.bot ? ships[lane] : DEFAULT_ROCKET,
       })),
     });
 

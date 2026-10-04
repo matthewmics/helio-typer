@@ -4,8 +4,10 @@ import { SignInButton } from "@/components/auth/sign-in-button";
 import { MainNav } from "@/components/layout/main-nav";
 import { RocketMark } from "@/components/rocket-mark";
 import { Avatar } from "@/components/ui/avatar";
+import { Meter } from "@/components/ui/meter";
 import { cn } from "@/lib/cn";
 import { PILOT } from "@/lib/data/profile";
+import { levelProgress } from "@/lib/levels";
 import type { Viewer } from "@/lib/viewer";
 
 /**
@@ -66,16 +68,28 @@ const UNIT = "text-xs font-semibold uppercase tracking-widest text-ink-dim";
 /**
  * Level and WPM at full body size. They used to be a 10px caption under the
  * handle, too small to read at a glance, and vanished entirely below `lg`.
+ *
+ * The level carries its XP bar, so the next level is always in sight. On a
+ * phone there is no room beside it; the profile has the full bar.
  */
 function PilotReadout() {
+  const xp = levelProgress(PILOT.xp);
+  const toNext = `${xp.into.toLocaleString()} / ${xp.span.toLocaleString()} XP to level ${xp.level + 1}`;
+
   return (
     <div className="flex items-center rounded-full border border-line bg-panel font-display text-base font-bold">
-      <span className={READING}>
+      <span className={READING} title={toNext}>
         <span className={UNIT}>
           <span aria-hidden>Lv</span>
           <span className="sr-only">Level</span>
         </span>
         {PILOT.level}
+        <Meter
+          value={xp.fraction}
+          aria-label="Experience"
+          aria-valuetext={toNext}
+          className="ml-1 hidden w-12 self-center sm:block"
+        />
       </span>
 
       <span className={cn(READING, "border-l border-line")}>
