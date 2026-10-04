@@ -141,7 +141,7 @@ export class Race {
       return;
     }
 
-    // Wrong key: every bit of built-up speed, one hull segment, and the character
+    // Wrong key: half the built-up speed, one hull segment, and the character
     // index does not advance. Speed is the only thing that moves the ship, so this
     // costs real distance rather than just a cosmetic penalty.
     this.mistakes++;
@@ -154,9 +154,9 @@ export class Race {
       this.stallTimer = this.cfg.stallDuration;
       this.hooks.onBreach?.();
     }
-    // Back to the cruise floor, which the breach above has already dropped to a
-    // true zero if this was the segment that took the hull with it.
-    this.speed = this.speedFloor;
+    // Halved, but never below the cruise floor. A breach above has already made
+    // the floor a true zero, and a stalled ship keeps none of its speed at all.
+    this.speed = this.phase === 'stalled' ? 0 : Math.max(this.speedFloor, this.speed / 2);
     this.hooks.onPrompt?.();
   }
 

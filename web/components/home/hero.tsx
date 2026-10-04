@@ -17,7 +17,7 @@ export function Hero() {
       </h2>
       <p className="mb-6 max-w-[44ch] text-base leading-relaxed text-ink-dim">
         Every correct keystroke builds thrust. Thrust bleeds away the moment you
-        hesitate. One mistake drops you to zero and cracks the hull.
+        hesitate. One mistake halves your speed and cracks the hull.
       </p>
 
       <HeroActions />

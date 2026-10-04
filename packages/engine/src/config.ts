@@ -47,7 +47,7 @@ export const DEFAULT_CONFIG: Readonly<RaceConfig> = {
   raceDistance: 30,
   maxSpeed: 1.2,
   minSpeed: 0.15,
-  stallDuration: 5,
+  stallDuration: 1,
 };
 
 /** Speed below this is treated as a dead stop, so decay actually reaches zero. */

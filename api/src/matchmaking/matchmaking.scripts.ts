@@ -26,7 +26,7 @@
  * Takes a full lobby if the queue holds one. Otherwise takes everyone waiting and
  * fills the rest with bots, but only once the longest waiter has been in line for
  * botFillAfterMs. The bot fill keys off the oldest waiter rather than off a timer
- * per guest, so a guest who joins nine seconds into someone else's wait is swept
+ * per guest, so a guest who joins four seconds into someone else's wait is swept
  * into that match instead of resetting the clock.
  *
  * KEYS: queue, matchIndex

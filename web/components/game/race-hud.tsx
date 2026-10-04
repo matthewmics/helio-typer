@@ -59,7 +59,7 @@ export const RaceHud = memo(function RaceHud() {
         </div>
         <div id="stallBadge">
           <i className="spark" />
-          HULL BREACH <b id="stallTimer">5.0s</b>
+          HULL BREACH <b id="stallTimer">1.0s</b>
         </div>
       </div>
 

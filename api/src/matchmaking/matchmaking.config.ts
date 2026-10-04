@@ -10,11 +10,11 @@ export const LOBBY_SIZE = 6;
  * How long a guest waits for real opponents before bots fill the lobby.
  *
  * The queue is empty most of the time in a game with no players yet, and a queue
- * that never resolves is indistinguishable from a broken one. Ten seconds is long
+ * that never resolves is indistinguishable from a broken one. Five seconds is long
  * enough that two guests arriving together still meet each other, and short enough
- * that a lone guest is racing before they give up.
+ * that a lone guest is racing almost at once.
  */
-export const BOT_FILL_AFTER_MS = 10_000;
+export const BOT_FILL_AFTER_MS = 5_000;
 
 /** Seconds a pilot has to accept a found match before it is abandoned. */
 export const READY_CHECK_MS = 15_000;

@@ -33,8 +33,8 @@ queue:join -> waiting -> match:found -> everyone accepts -> match:confirmed
 ```
 
 - Lobby is 6. A full queue matches instantly.
-- **Bots fill after 10 seconds**, measured from the *oldest* waiter, not per
-  guest. A guest arriving nine seconds into someone else's wait joins that match
+- **Bots fill after 5 seconds**, measured from the *oldest* waiter, not per
+  guest. A guest arriving four seconds into someone else's wait joins that match
   rather than resetting the clock.
 - Bots are created pre-accepted. There is no socket to prompt, so a pending bot
   would deadlock every ready check it appeared in.

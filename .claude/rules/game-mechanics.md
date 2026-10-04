@@ -40,25 +40,25 @@ second copy.
   | Cold on the pad, before the first correct keystroke | 0 |
   | Locked out by a hull-breach stall | 0 |
   | After the finish | 0 |
-  | Anything else, including a mistake or a long pause | `minSpeed` |
+  | Anything else, including a long pause | `minSpeed` |
 
 - The epsilon clamp (`speed < EPS` becomes 0) and the cruise floor coexist and
   do not conflict: `speedFloor` returns 0 unless the ship is launched and
   racing, so the clamp only bites in the three states above.
 - Rationale for the floor: over a full solar-system run a motionless scene reads
   as the game having frozen rather than as lost speed. A mistake still costs
-  every bit of built-up speed, which was always the point, but the ship keeps
-  ghosting forward at the floor.
+  half of your built-up speed and a long pause bleeds all of it away, but the
+  ship keeps ghosting forward at the floor.
 
 ## Mistakes and hull
 
-- A wrong keydown fires once: `speed` drops to the cruise floor, `hull -= 1`,
-  the prompt flashes red, and the ship shakes. The character index does not
-  advance.
+- A wrong keydown fires once: `speed` halves (never below the cruise floor),
+  `hull -= 1`, the prompt flashes red, and the ship shakes. The character index
+  does not advance.
 - Hull reaching zero does not destroy the ship. It stalls instead: input locks
   out, physics freeze, sparks burst, and the prompt goes dead with a live
-  countdown (`stallDuration`). After the countdown, hull refills, speed resets to
-  the cruise floor, and typing resumes on the same character.
+  countdown (`stallDuration`, 1 second). After the countdown, hull refills,
+  speed resets to the cruise floor, and typing resumes on the same character.
 - During a stall the whole sentence stays on screen, greyed out, with arcs
   flickering around the panel border and the countdown on a chip straddling the
   panel's top edge. Never hide the text: that is worst exactly when the player
