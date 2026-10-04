@@ -1,10 +1,9 @@
 import { RocketMark } from "@/components/rocket-mark";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { MeterRow } from "@/components/ui/meter";
 import { cn } from "@/lib/cn";
-import { RARITY_TEXT, STAT_FILL } from "@/lib/rarity";
-import type { Ship, ShipStat } from "@/lib/types";
+import { RARITY_TEXT } from "@/lib/rarity";
+import type { Ship } from "@/lib/types";
 
 export type ShipDetailProps = {
   ship: Ship;
@@ -12,16 +11,24 @@ export type ShipDetailProps = {
   onEquip: (id: string) => void;
 };
 
+/**
+ * The detail panel for the selected ship.
+ *
+ * This used to be three stat meters and a perk box. Both are gone: ships are
+ * cosmetic only, so there is no number to plot and no bonus to describe. The art
+ * gets the space the meters were taking instead, which is the honest layout for
+ * a screen whose whole subject is how something looks.
+ */
 export function ShipDetail({ ship, equipped, onEquip }: ShipDetailProps) {
   return (
     <Card>
-      <div className="mb-4 grid h-45 place-items-center rounded-xl border border-line bg-[radial-gradient(ellipse_at_50%_78%,rgba(79,216,255,0.15),transparent_68%),var(--color-well)]">
+      <div className="mb-4 grid h-60 place-items-center rounded-xl border border-line bg-[radial-gradient(ellipse_at_50%_78%,rgba(79,216,255,0.15),transparent_68%),var(--color-well)]">
         <RocketMark
           detail="full"
           hull={ship.hull}
           fin={ship.fin}
           finShadow={ship.finShadow}
-          className="w-19.5 animate-float"
+          className="w-24 animate-float"
         />
       </div>
 
@@ -35,24 +42,12 @@ export function ShipDetail({ ship, equipped, onEquip }: ShipDetailProps) {
         {ship.rarity}
       </span>
 
-      {(Object.entries(ship.stats) as [ShipStat, number][]).map(
-        ([stat, value]) => (
-          <MeterRow
-            key={stat}
-            label={stat}
-            value={value}
-            meter={value}
-            fill={STAT_FILL[stat]}
-          />
-        ),
-      )}
+      <p className="text-xs leading-relaxed text-ink-dim">{ship.flavor}</p>
 
-      <div className="mt-4 rounded-lg border border-line bg-panel-hi px-3 py-2.5 text-xs leading-relaxed text-ink-dim">
-        <b className="mb-0.5 block font-display text-xs tracking-[0.04em] text-accent">
-          {ship.perk}
-        </b>
-        {ship.perkText}
-      </div>
+      <p className="mt-4 rounded-lg border border-line bg-panel-hi px-3 py-2.5 text-2xs leading-relaxed text-ink-dim">
+        <b className="text-ink">Paint only.</b> Every ship flies identical
+        physics, so what you fly never changes a race result.
+      </p>
 
       <div className="mt-4">
         {!ship.owned ? (

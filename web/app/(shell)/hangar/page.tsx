@@ -11,16 +11,17 @@ export default function HangarPage() {
       <PageHeader
         eyebrow="Loadout"
         title="Hangar"
-        subtitle="Ships change how the run feels, not how fast you can type. Each one trades something away."
+        subtitle="Every ship flies the same. Pick the one you want to be seen in."
       />
 
       <HangarBrowser />
 
-      <DesignNote title="Balance thought.">
-        Keep ship effects small and sideways rather than straight upgrades, so a
-        new player on the starter ship is never simply outgunned. Cosmetic-only
-        is also a defensible option, and it sidesteps the balance problem
-        entirely for a portfolio build.
+      <DesignNote title="Settled: cosmetic only.">
+        Ships carried stat perks here until this was decided the other way. A
+        purchasable stat is a second variable inside completion time and WPM,
+        which are the two numbers the whole game exists to measure, and every fix
+        for that costs more than the perks were worth. What a ship still has to
+        earn is wanting to be seen in it.
       </DesignNote>
     </>
   );

@@ -5,10 +5,9 @@
  *
  * The particle textures (smoke, spark, ember, star) are deliberately WHITE with
  * only form shading baked in, because they are meant to be tinted at runtime.
- * Excalibur's ParticleEmitter and Sprite both multiply by a tint colour, so a
- * white source can become warm launch smoke, cold high-altitude smoke or grey
- * damage smoke from one texture. Baking a colour in would force one sheet per
- * mood.
+ * The game multiplies them by a tint colour, so a white source can become warm
+ * launch smoke, cold high-altitude smoke or grey damage smoke from one texture.
+ * Baking a colour in would force one sheet per mood.
  *
  * The breach burst is the exception: it is a complete effect rather than a
  * particle, so it carries its own electric palette — the same one the rockets'

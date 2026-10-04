@@ -1,0 +1,4 @@
+# Build output. Rebuilt with `pnpm --filter @heliotyper/engine build`, which both
+# app build scripts run first, and which the Dockerfiles run at image build time.
+dist
+*.tsbuildinfo

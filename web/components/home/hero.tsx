@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { RocketMark } from "@/components/rocket-mark";
-import { buttonStyles } from "@/components/ui/button";
+import { HeroActions } from "@/components/home/hero-actions";
 
 export function Hero() {
   return (
@@ -21,19 +20,7 @@ export function Hero() {
         hesitate. One mistake drops you to zero and cracks the hull.
       </p>
 
-      <div className="flex flex-wrap gap-3">
-        <Link href="/lobby" className={buttonStyles()}>
-          ▲ Find match
-        </Link>
-        <Link href="/lobby" className={buttonStyles({ variant: "ghost" })}>
-          Create room
-        </Link>
-      </div>
-
-      <p className="mt-5 text-xs text-ink-dim">
-        <span className="mr-1.5 inline-block size-1.5 animate-twinkle rounded-full bg-success shadow-[0_0_7px_var(--color-success)]" />
-        1,204 pilots online · avg queue 6s
-      </p>
+      <HeroActions />
     </section>
   );
 }

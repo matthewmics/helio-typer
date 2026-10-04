@@ -4,17 +4,27 @@ Things being actively tried out that are not proven conventions yet. **Nothing i
 this file is binding.** Only [.claude/rules/](../rules/) and the root `CLAUDE.md`
 are project convention.
 
-The distinction from [ideas.md](ideas.md): entries here have running code you can
-open. That does not make them settled. Everything under `_prototypes/` is
-explicitly not production code, and a finding here only becomes a rule once it
-survives the real build.
+The distinction from [ideas.md](ideas.md): entries here were proven by code that
+actually ran. That does not make them settled, and a finding here only becomes a
+rule once it survives the real build.
+
+The spikes that backed these entries lived in `_prototypes/` and were deleted on
+2026-08-31, so most of the code links below now point into git history at commit
+`c4db0f8` rather than at the working tree. Where an entry has since landed in
+the real app it is marked `[LANDED]` and links to the live source instead.
 
 ---
 
 ## [EXPERIMENTAL] Three-flow netcode
 
 *2026-08-19. Designed in the rating doc (section 4.9), then built as a spike in
-[_prototypes/multiplayer/](../../_prototypes/multiplayer/).*
+`_prototypes/multiplayer/`, which was deleted on 2026-08-31 and survives only in
+git history at `c4db0f8`.*
+
+> **This entry is now the specification, not a summary of one.** The three flows
+> below never reached `api/`, which has matchmaking and nothing else, so there is
+> no working code left to read them off. Rebuild from this text, or recover the
+> spike from history first.
 
 **What is being tested:** whether the client can stay instantly responsive while
 the server still ends up with a trustworthy number, and whether smoothness comes
@@ -27,8 +37,7 @@ every 120ms, well inside typical WebSocket round-trip time, so gating feedback o
 the server would make typing feel sluggish for exactly the players who would
 notice most.
 
-Three network flows out of the client, at three different trust levels, defined in
-`_prototypes/multiplayer/shared/protocol.ts`:
+Three network flows out of the client, at three different trust levels:
 
 | Flow | Message | Rate | Trusted? |
 |---|---|---|---|
@@ -102,10 +111,24 @@ server, and their state reaches the browser through the exact same snapshot stre
 a remote human's would, so they genuinely exercise the netcode rather than faking
 it.
 
-## [EXPERIMENTAL] ExcaliburJS port
+## [LANDED] ExcaliburJS port
 
-*[undated], in progress at
-[_prototypes/game/](../../_prototypes/game/)*
+*Ported into the real app on 2026-08-31. Runs at `/play`, source in
+[web/game/](../../web/game/). The original spike at `_prototypes/game/` was
+deleted the same day, since the port superseded it entirely.*
+
+*Excalibur itself was removed on 2026-10-03 in favour of plain Canvas 2D, see
+the Rendering section of [rules/game-presentation.md](../rules/game-presentation.md).
+What this entry describes carried over unchanged, with one exception: the sky
+gradient had never actually drawn under Excalibur (the pad showed black above
+the horizon glow), and now it does.*
+
+Three things differ from that spike, all of them forced by Next rather than
+chosen: art is fetched over HTTP from `/game` instead of Vite `?url` imports,
+the dev panel is omitted (the markup is simply absent and `Hud` treats every
+part of it as optional), and both the engine and the scene's window listener are
+torn down on unmount, which the spike never needed because its page owned exactly
+one engine for its whole life.
 
 **What is being tested:** the full outbound run to the heliopause on real
 generated art, on a real engine, with a particle system and a locked camera.
@@ -122,19 +145,30 @@ Still unsettled here:
   the flagged tension in [rules/game-presentation.md](../rules/game-presentation.md).
 - The dev panel's tunable physics block is a development affordance, not a
   shipping feature. Its defaults are not balance decisions.
-- The playground deliberately runs a much shorter `raceDistance` (12 vs 30). A
-  netcode prototype you have to type at for three minutes to observe is one nobody
-  runs twice. Do not read either number as a balance decision.
+- The netcode playground deliberately ran a much shorter `raceDistance` (12 vs
+  30), because a prototype you have to type at for three minutes to observe is one
+  nobody runs twice. Neither number was a balance decision, and 30 is the one that
+  survived into [web/game/config.ts](../../web/game/config.ts).
 
-## [EXPERIMENTAL] UI mockup
+## [SUPERSEDED] UI mockup
 
-*[undated],
-[_prototypes/ui/](../../_prototypes/ui/)*
+*[undated], built as `_prototypes/ui/ui-mockup.html`, deleted 2026-08-31. The
+shell it was sketching is now the real app: see [web/app/](../../web/app/) and
+[web/components/](../../web/components/).*
 
-**What is being tested:** the surrounding app shell, rankings page, profile, and
+**What it was testing:** the surrounding app shell, rankings page, profile, and
 the Hangar with its ship roster.
 
-The Hangar sketches ships with stat-affecting perks (extra hull segment, softened
-mistake penalty, decay pause on combo). Whether those ship perks exist at all is
-unresolved, and it has direct consequences for leaderboard fairness, see
-[ideas.md](ideas.md). Nothing in the Hangar has been agreed as a game mechanic.
+The Hangar sketched ships with stat-affecting perks (extra hull segment, softened
+mistake penalty, decay pause on combo). **That is decided against as of
+2026-08-31: ships are cosmetic only.** See
+[ideas.md](ideas.md). That copy was carried into the real app, so the perks and
+the Thrust / Decay resist / Hull stat bars in
+[web/lib/data/ships.ts](../../web/lib/data/ships.ts) are now stale content
+contradicting a settled decision, not a design still under consideration.
+
+What is still open in the Hangar is what survives that decision: what
+differentiates one ship from another once it cannot be a stat (silhouette, trim,
+plume color), whether rarity tiers and credit costs still carry weight with
+nothing but appearance behind them, and how a ship panel reads without a stat
+block to fill it.

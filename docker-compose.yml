@@ -21,6 +21,9 @@ services:
       dockerfile: api/Dockerfile
     volumes:
       - ./api:/app/api
+      # Shared simulation. Built on the host; rebuild with
+      # `pnpm --filter @heliotyper/engine build` after editing it.
+      - ./packages:/app/packages
       - /app/api/node_modules
       - /app/node_modules
     environment:
@@ -47,6 +50,11 @@ services:
       dockerfile: web/Dockerfile
     volumes:
       - ./web:/app/web
+      # Read-only: the game's art is generated into assets/ and synced into
+      # web/public/game at startup. The container never writes back.
+      - ./assets:/app/assets:ro
+      # Shared simulation, same as the api service.
+      - ./packages:/app/packages
       - /app/web/node_modules
       - /app/node_modules
     environment:

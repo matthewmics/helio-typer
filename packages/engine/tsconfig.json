@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    // CommonJS on purpose. This one build has to be consumable by `nest build`
+    // (tsc, CJS), the api's webpack HMR dev build, and Next. CJS plus emitted
+    // declarations is the only output all three read without configuration.
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
