@@ -3,9 +3,11 @@
     // CommonJS on purpose. This one build has to be consumable by `nest build`
     // (tsc, CJS), the api's webpack HMR dev build, and Next. CJS plus emitted
     // declarations is the only output all three read without configuration.
+    // node16 still emits CJS, because package.json has no "type": "module" and
+    // that field, not this one, picks the format. Adding it would switch to ESM.
     "target": "ES2022",
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "node16",
+    "moduleResolution": "node16",
     "lib": ["ES2022"],
     "declaration": true,
     "declarationMap": true,
